@@ -1,0 +1,12 @@
+[project]
+name = "land-law-parser"
+version = "0.1.0"
+description = "Vietnamese Land Law PDF Parser and Chunker"
+dependencies = [
+    "PyMuPDF>=1.23.28",
+]
+requires-python = ">=3.13"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

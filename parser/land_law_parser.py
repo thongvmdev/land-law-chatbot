@@ -602,6 +602,34 @@ if __name__ == "__main__":
         parser = LandLawChunkerFinal(PDF_FILE)
         final_data = parser.process()
 
+        # Page 218 is image, so fitz can not load content, temp handle this way
+        # Remove the last item from final_data
+        if final_data:
+            final_data.pop()
+            print(f"🗑️ Đã xóa item cuối cùng. Còn lại: {len(final_data)} chunks")
+
+        # Load and concatenate content from law_content_page_128.json
+        EXTERNAL_JSON_FILE = "../law_content_page_128.json"
+        try:
+            with open(EXTERNAL_JSON_FILE, "r", encoding="utf-8") as f:
+                external_data = json.load(f)
+
+            if isinstance(external_data, list):
+                final_data.extend(external_data)
+                print(f"➕ Đã thêm {len(external_data)} chunks từ {EXTERNAL_JSON_FILE}")
+                print(f"📊 Tổng cộng sau khi ghép: {len(final_data)} chunks")
+            else:
+                print(
+                    f"⚠️ Cảnh báo: {EXTERNAL_JSON_FILE} không phải là array, bỏ qua việc ghép"
+                )
+
+        except FileNotFoundError:
+            print(
+                f"⚠️ Không tìm thấy file {EXTERNAL_JSON_FILE}, tiếp tục với dữ liệu hiện tại"
+            )
+        except json.JSONDecodeError as e:
+            print(f"❌ Lỗi đọc JSON từ {EXTERNAL_JSON_FILE}: {e}")
+
         # Xuất kết quả
         OUTPUT_FILE = "land_law_chunks_final.json"
         with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
