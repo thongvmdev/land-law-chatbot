@@ -609,7 +609,7 @@ if __name__ == "__main__":
             print(f"🗑️ Đã xóa item cuối cùng. Còn lại: {len(final_data)} chunks")
 
         # Load and concatenate content from law_content_page_128.json
-        EXTERNAL_JSON_FILE = "../law_content_page_128.json"
+        EXTERNAL_JSON_FILE = "law_content_page_128.json"
         try:
             with open(EXTERNAL_JSON_FILE, "r", encoding="utf-8") as f:
                 external_data = json.load(f)
