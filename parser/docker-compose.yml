@@ -1,0 +1,40 @@
+version: "3.8"
+
+services:
+  land-law-parser:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: land-law-parser
+    ports:
+      - "8001:8001"
+    volumes:
+      # Mount PDF files directory for processing
+      - ./data:/app/data:ro
+      # Mount the PDF file specifically (adjust path as needed)
+      - ./133-vbhn-vpqh.pdf:/app/133-vbhn-vpqh.pdf:ro
+      # Mount additional JSON data file
+      - ./law_content_page_128.json:/app/law_content_page_128.json:ro
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8001
+      - PYTHONPATH=/app
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import requests; requests.get('http://localhost:8001/health')",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - parser-network
+
+networks:
+  parser-network:
+    driver: bridge
