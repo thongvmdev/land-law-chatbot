@@ -2,7 +2,7 @@
  * Embeddings module for managing different embedding providers.
  *
  * Supports:
- * - ollama/nomic-embed-text: Local Ollama embeddings with 2K context window (default)
+ * - ollama/nomic-embed-text: Local Ollama embeddings with 2K context window
  * - openai/*: OpenAI embeddings
  * - weaviate/*: Legacy Weaviate built-in vectorizer (deprecated)
  */
@@ -17,19 +17,8 @@ import { OLLAMA_BASE_URL } from './constants.js'
  *
  * @param model - Model specification in format "provider/model-name"
  * @param baseUrl - Base URL for Ollama (optional, defaults to OLLAMA_BASE_URL)
+ * @param useRateLimiting - Whether to use rate-limited wrapper for Google embeddings (default: true)
  * @returns Embeddings instance or null for Weaviate built-in vectorizer
- *
- * @example
- * ```typescript
- * // Ollama embeddings
- * const embeddings = getEmbeddingsModel("ollama/nomic-embed-text");
- *
- * // OpenAI embeddings
- * const embeddings = getEmbeddingsModel("openai/text-embedding-3-small");
- *
- * // Weaviate built-in (returns null)
- * const embeddings = getEmbeddingsModel("weaviate/vectorizer");
- * ```
  */
 export function getEmbeddingsModel(
   model?: string,
@@ -37,26 +26,25 @@ export function getEmbeddingsModel(
 ): Embeddings | null {
   const ollamaApiKey = process.env.OLLAMA_API_KEY || ''
 
-  const modelSpec =
-    model || process.env.EMBEDDING_MODEL || 'ollama/nomic-embed-text'
+  const modelSpec = model || process.env.EMBEDDING_MODEL
 
-  const [provider, modelName] = modelSpec.split('/', 2)
+  const [provider, modelName] = modelSpec?.split('/', 2) || []
+  console.log('  - provider:', { provider, modelName })
 
   switch (provider.toLowerCase()) {
     case 'ollama':
-      // Ollama embeddings with nomic-embed-text (2K context, 768 dimensions)
       return new OllamaEmbeddings({
         model: modelName,
         baseUrl,
         headers: {
           'X-API-Key': ollamaApiKey,
         },
+        dimensions: 768,
       })
 
     case 'openai':
       return new OpenAIEmbeddings({
         model: modelName,
-        // Chunk size for batching
         batchSize: 200,
       })
 
@@ -66,6 +54,7 @@ export function getEmbeddingsModel(
       return null
 
     default:
+      console.error('❌ Unsupported embedding provider:', provider)
       throw new Error(`Unsupported embedding provider: ${provider}`)
   }
 }

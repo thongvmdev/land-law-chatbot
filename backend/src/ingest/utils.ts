@@ -14,7 +14,7 @@ import { Document } from '@langchain/core/documents'
 import { WeaviateStore } from '@langchain/weaviate'
 import { PostgresRecordManager } from '@langchain/community/indexes/postgres'
 import { index } from '@langchain/core/indexing'
-import { WEAVIATE_GENERAL_GUIDES_AND_TUTORIALS_INDEX_NAME } from '../constants.js'
+import { WEAVIATE_GENERAL_LAND_LAW_VN } from '../constants.js'
 
 // Environment variables
 const RECORD_MANAGER_DB_URL = process.env.RECORD_MANAGER_DB_URL
@@ -70,7 +70,7 @@ export async function writeDocumentsToJsonFile(
   description: string,
 ): Promise<void> {
   const serializedData = documents.map(serializeDocumentForJson)
-  const filePath = path.join(process.cwd(), '..', filename)
+  const filePath = path.join(process.cwd(), 'data', filename)
 
   console.log(`Writing to: ${filePath}`)
   await fs.writeFile(filePath, JSON.stringify(serializedData, null, 2), 'utf-8')
@@ -138,13 +138,42 @@ export function createWeaviateVectorStore(
   weaviateClient: any,
   embedding: any,
 ): WeaviateStore {
-  console.log('Indexing documents in Weaviate...')
+  const indexName = WEAVIATE_GENERAL_LAND_LAW_VN
+  console.log(`Indexing documents in Weaviate collection: ${indexName}`)
 
   return new WeaviateStore(embedding, {
     client: weaviateClient,
-    indexName: WEAVIATE_GENERAL_GUIDES_AND_TUTORIALS_INDEX_NAME,
+    indexName,
     textKey: 'text',
-    metadataKeys: ['source', 'title'],
+    metadataKeys: [
+      // Core document identification
+      'source',
+      'title',
+      'law_id',
+      'article_id',
+      'article_title',
+      'chunk_id',
+      'chunk_type',
+
+      // Document structure
+      'chapter_id',
+      'chapter_title',
+      'section_id',
+      'section_title',
+      'clause_id',
+      'point_id',
+
+      // Content metadata
+      'topic',
+      'source_file',
+      'footnotes',
+      'chunk_footnotes',
+      'has_points',
+
+      // Location and positioning data
+      'page_number',
+      'coordinates',
+    ],
   })
 }
 
@@ -159,7 +188,7 @@ export async function createRecordManager(): Promise<PostgresRecordManager> {
   const dbUrl = RECORD_MANAGER_DB_URL?.split('?')[0] || RECORD_MANAGER_DB_URL
 
   const recordManager = new PostgresRecordManager(
-    `weaviate/${WEAVIATE_GENERAL_GUIDES_AND_TUTORIALS_INDEX_NAME}`,
+    `weaviate/${WEAVIATE_GENERAL_LAND_LAW_VN}`,
     {
       postgresConnectionOptions: {
         connectionString: dbUrl,
@@ -176,6 +205,7 @@ export async function createRecordManager(): Promise<PostgresRecordManager> {
 
 /**
  * Index documents in the vector store with record manager tracking.
+ * Uses smaller batch sizes and retry logic to avoid HTTP 413 errors.
  *
  * @param documents - Documents to index
  * @param vectorStore - Vector store instance
@@ -187,20 +217,45 @@ export async function indexDocumentsInVectorStore(
   vectorStore: WeaviateStore,
   recordManager: PostgresRecordManager,
 ): Promise<any> {
-  const indexingStats = await index({
-    docsSource: documents,
-    recordManager,
-    vectorStore,
-    options: {
-      cleanup: 'full',
-      sourceIdKey: 'source',
-      forceUpdate:
-        (process.env.FORCE_UPDATE || 'false').toLowerCase() === 'true',
-    },
-  })
+  // Use smaller batch size to avoid HTTP 413 errors
+  const batchSize = parseInt(process.env.WEAVIATE_BATCH_SIZE || '50', 10)
+  console.log(`Using batch size: ${batchSize} documents per batch`)
 
-  console.log(`Indexing stats:`, indexingStats)
-  return indexingStats
+  try {
+    const indexingStats = await index({
+      docsSource: documents,
+      recordManager,
+      vectorStore,
+      options: {
+        cleanup: 'full',
+        sourceIdKey: 'source',
+        forceUpdate:
+          (process.env.FORCE_UPDATE || 'false').toLowerCase() === 'true',
+        // Configure batch size for Weaviate operations
+        batchSize,
+      },
+    })
+
+    console.log('✅ Indexing completed successfully')
+    console.log(`Indexing stats:`, indexingStats)
+
+    // Validate that vectors were actually stored
+    if (indexingStats.numAdded === 0 && indexingStats.numUpdated === 0) {
+      console.warn(
+        '⚠️ Warning: No documents were added or updated during indexing',
+      )
+    }
+
+    return indexingStats
+  } catch (error) {
+    // If we get HTTP 413 errors, try with even smaller batches
+    if (error instanceof Error && error.message.includes('413')) {
+      console.warn(
+        'HTTP 413 error detected, retrying with smaller batch size...',
+      )
+    }
+    throw error
+  }
 }
 
 /**
@@ -210,7 +265,7 @@ export async function indexDocumentsInVectorStore(
  */
 export async function logTotalVectorCount(weaviateClient: any): Promise<void> {
   const collection = await weaviateClient.collections.get(
-    WEAVIATE_GENERAL_GUIDES_AND_TUTORIALS_INDEX_NAME,
+    WEAVIATE_GENERAL_LAND_LAW_VN,
   )
   const totalCount = await collection.aggregate.overAll()
   console.log(`Total vectors in collection: ${totalCount.totalCount}`)

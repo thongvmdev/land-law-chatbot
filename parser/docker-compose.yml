@@ -11,10 +11,6 @@ services:
     volumes:
       # Mount PDF files directory for processing
       - ./data:/app/data:ro
-      # Mount the PDF file specifically (adjust path as needed)
-      - ./133-vbhn-vpqh.pdf:/app/133-vbhn-vpqh.pdf:ro
-      # Mount additional JSON data file
-      - ./law_content_page_128.json:/app/law_content_page_128.json:ro
     environment:
       - HOST=0.0.0.0
       - PORT=8001

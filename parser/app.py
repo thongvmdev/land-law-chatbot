@@ -8,12 +8,13 @@ and return parsed chunks that can be consumed by the backend ingestion system.
 import asyncio
 import os
 from typing import List, Optional, Dict, Any
+import json
 
 import uvicorn
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
-from land_law_parser import LandLawChunkerFinal
+from land_law_parser import LandLawChunkerFinal, load_and_concatenate_external_json
 
 
 # Pydantic models for request/response
@@ -109,7 +110,7 @@ async def process_pdf_async(max_pages: Optional[int] = None) -> List[Dict[str, A
         List of parsed chunks
     """
     # Fixed path to the Land Law PDF file
-    pdf_path = "133-vbhn-vpqh.pdf"
+    pdf_path = "./data/133-vbhn-vpqh.pdf"
 
     def _process_pdf():
         """Synchronous PDF processing function."""
@@ -119,6 +120,11 @@ async def process_pdf_async(max_pages: Optional[int] = None) -> List[Dict[str, A
     # Run the synchronous parser in a thread pool to avoid blocking
     loop = asyncio.get_event_loop()
     chunks = await loop.run_in_executor(None, _process_pdf)
+
+    # Load and concatenate content from law_content_page_128.json
+    EXTERNAL_JSON_FILE = "./data/law_content_page_128.json"
+    chunks = load_and_concatenate_external_json(EXTERNAL_JSON_FILE, chunks)
+
     return chunks
 
 
@@ -135,7 +141,7 @@ async def parse_pdf(request: ParseRequest):
     """
     try:
         # Fixed PDF file path
-        pdf_path = "133-vbhn-vpqh.pdf"
+        pdf_path = "./data/133-vbhn-vpqh.pdf"
 
         # Validate file exists
         if not os.path.exists(pdf_path):

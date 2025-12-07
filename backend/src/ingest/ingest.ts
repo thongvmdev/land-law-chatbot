@@ -1,51 +1,179 @@
 import 'dotenv/config'
 
-import { RecursiveCharacterTextSplitter } from '@langchain/textsplitters'
 import { PostgresRecordManager } from '@langchain/community/indexes/postgres'
 import { getWeaviateClient } from '../utils.js'
 import { getEmbeddingsModel } from '../embeddings.js'
 import { OLLAMA_BASE_EMBEDDING_DOCS_URL } from '../constants.js'
 import { Document } from '@langchain/core/documents'
-import { reactDevExtractor } from './parser.js'
-import { loadFromPlaywrightRecursive } from './loaders/index.js'
 
 import {
-  writeDocumentsToJsonFile,
-  splitAndFilterDocuments,
-  ensureRequiredMetadata,
-  createWeaviateVectorStore,
   createRecordManager,
+  createWeaviateVectorStore,
+  ensureRequiredMetadata,
   indexDocumentsInVectorStore,
   logTotalVectorCount,
+  writeDocumentsToJsonFile,
 } from './utils.js'
 
 const WEAVIATE_URL = process.env.WEAVIATE_URL
 const WEAVIATE_GRPC_URL = process.env.WEAVIATE_GRPC_URL
 const WEAVIATE_API_KEY = process.env.WEAVIATE_API_KEY
+const PARSER_SERVICE_URL =
+  process.env.PARSER_SERVICE_URL || 'http://localhost:8001'
 
 /**
- * Ingest general guides and tutorials.
+ * Interface for parser service response.
  */
-export async function ingestGeneralGuidesAndTutorials(): Promise<Document[]> {
-  // Use Playwright loader for React.dev (JavaScript-rendered site)
-  const aggregatedSiteDocs = await loadFromPlaywrightRecursive(
-    'https://react.dev/reference/react/useContext',
-    {
-      maxDepth: 3, // crawl through all hook pages
-      timeout: 15000, // 15s timeout for URL discovery
-      preventOutside: true, // do not leave react.dev domain
-      extractor: reactDevExtractor, // Use React.dev specific extractor
-      maxPages: 1, // crawl only one page
-    },
-  )
+interface ParsedChunk {
+  page_content: string
+  metadata: {
+    law_id: string
+    chapter_id?: string | null
+    chapter_title?: string | null
+    section_id?: string | null
+    section_title?: string | null
+    article_id: string
+    article_title: string
+    topic: string
+    source_file: string
+    footnotes: string
+    chunk_id: string
+    chunk_type: string
+    clause_id?: string | null
+    point_id?: string | null
+    page_number: number[]
+    coordinates: Array<Record<string, unknown>>
+    chunk_footnotes: string
+    has_points?: boolean | null
+  }
+}
 
-  if (aggregatedSiteDocs.length === 0) {
-    throw new Error(
-      'No documents were loaded! Check your base URL and options.',
-    )
+interface ParseResponse {
+  success: boolean
+  chunks: ParsedChunk[]
+  total_chunks: number
+  message: string
+}
+
+interface ParseRequest {
+  max_pages?: number | null
+}
+
+/**
+ * Fetch chunks from the Land Law parser service.
+ *
+ * @param maxPages - Optional maximum number of pages to process
+ * @returns Array of LangChain Document objects
+ */
+export async function fetchLandLawChunksFromParser(
+  maxPages?: number | null,
+): Promise<Document[]> {
+  const url = `${PARSER_SERVICE_URL}/parse-pdf`
+  const requestBody: ParseRequest = {}
+
+  if (maxPages !== undefined && maxPages !== null) {
+    requestBody.max_pages = maxPages
   }
 
-  return aggregatedSiteDocs
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(requestBody),
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      throw new Error(
+        `Parser service returned ${response.status}: ${errorText}`,
+      )
+    }
+
+    const data: ParseResponse = await response.json()
+
+    if (!data.success) {
+      throw new Error(`Parser service returned error: ${data.message}`)
+    }
+
+    if (!data.chunks || data.chunks.length === 0) {
+      console.warn('Parser service returned no chunks')
+      return []
+    }
+
+    // Convert parser chunks to LangChain Document format
+    const documents = data.chunks.map((chunk) => {
+      // Map parser metadata to LangChain document metadata
+      // Ensure required fields (source, title) are present
+      const metadata: Record<string, unknown> = {
+        ...chunk.metadata,
+        source: chunk.metadata.source_file || '133-vbhn-vpqh.pdf',
+        title:
+          chunk.metadata.article_title ||
+          chunk.metadata.chapter_title ||
+          'Land Law Document',
+      }
+
+      // Convert complex coordinates array to string format for Weaviate storage
+      // Weaviate cannot store nested objects/arrays, so we serialize them
+      if (
+        chunk.metadata.coordinates &&
+        Array.isArray(chunk.metadata.coordinates)
+      ) {
+        try {
+          metadata.coordinates = JSON.stringify(chunk.metadata.coordinates)
+        } catch (error) {
+          console.warn('Failed to serialize coordinates:', error)
+          metadata.coordinates = '[]'
+        }
+      }
+
+      // Also convert page_number array to ensure it's stored properly
+      if (
+        chunk.metadata.page_number &&
+        Array.isArray(chunk.metadata.page_number)
+      ) {
+        // Keep as array since Weaviate supports int[] type
+        metadata.page_number = chunk.metadata.page_number
+      }
+
+      // Handle null values that Weaviate filters out
+      // Convert null values to empty strings to ensure fields are always present in schema
+      const fieldsToPreserve: (keyof ParsedChunk['metadata'])[] = [
+        'point_id',
+        'clause_id',
+        'section_id',
+        'section_title',
+      ]
+      fieldsToPreserve.forEach((field) => {
+        if (
+          chunk.metadata?.[field] === null ||
+          chunk.metadata?.[field] === undefined
+        ) {
+          metadata[field] = '' // Use empty string instead of null
+        } else {
+          metadata[field] = chunk.metadata?.[field]
+        }
+      })
+
+      return new Document({
+        pageContent: chunk.page_content,
+        metadata,
+      })
+    })
+
+    console.log(`✓ Fetched ${documents.length} chunks from parser service`)
+
+    return documents
+  } catch (error) {
+    if (error instanceof Error) {
+      throw new Error(
+        `Failed to fetch chunks from parser service: ${error.message}`,
+      )
+    }
+    throw new Error('Failed to fetch chunks from parser service: Unknown error')
+  }
 }
 
 /**
@@ -55,20 +183,12 @@ export async function ingestGeneralGuidesAndTutorials(): Promise<Document[]> {
 export async function ingestDocs(): Promise<void> {
   console.log('Starting document ingestion...')
 
-  // Initialize text splitter
-  // Chunks for nomic-embed-text (2K token context window)
-  // Reduce to 2000 chars ≈ 500-650 tokens to avoid context overflow
-  // TypeScript Ollama client seems more strict than Python version
-  const textSplitter = new RecursiveCharacterTextSplitter({
-    chunkSize: 4000,
-    chunkOverlap: 200,
-  })
-
   // Initialize embeddings model
   const embedding = getEmbeddingsModel(
-    undefined,
+    'ollama/qwen3-embedding:0.6b',
     OLLAMA_BASE_EMBEDDING_DOCS_URL,
   )
+
   if (!embedding) {
     throw new Error('Embeddings model is required for ingestion')
   }
@@ -83,31 +203,15 @@ export async function ingestDocs(): Promise<void> {
   let recordManager: PostgresRecordManager | undefined
 
   try {
-    // Step 1: Load documents
-    console.log('Loading documents...')
-    console.log('Step 1/5: Fetching documents from sitemap...')
-    const rawDocuments = await ingestGeneralGuidesAndTutorials()
-    console.log(`✓ Loaded ${rawDocuments.length} documents successfully`)
+    console.log('Fetching documents from parser service...')
+    const chunks = await fetchLandLawChunksFromParser()
+    console.log(`✓ Loaded ${chunks.length} documents successfully`)
 
-    // Step 2: Write raw documents to file
-    console.log('Step 2/5: Writing raw documents to file...')
-    await writeDocumentsToJsonFile(
-      rawDocuments,
-      'raw_docs_js.json',
-      'raw documents',
-    )
-
-    // Step 3: Split and filter documents
-    const chunks = await splitAndFilterDocuments(rawDocuments, textSplitter)
-
-    // Step 4: Write chunks to file
-    console.log('Step 4/5: Writing chunks to file...')
+    console.log('Writing chunks to file...')
     await writeDocumentsToJsonFile(chunks, 'chunks_js.json', 'chunks')
 
-    // Step 5: Ensure required metadata
     ensureRequiredMetadata(chunks)
 
-    // Create vector store and record manager
     const vectorStore = createWeaviateVectorStore(weaviateClient, embedding)
     recordManager = await createRecordManager()
 

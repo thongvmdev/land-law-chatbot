@@ -1,6 +1,39 @@
 import fitz  # PyMuPDF
 import re
 import json
+from typing import List, Dict, Any
+
+
+def load_and_concatenate_external_json(
+    json_file_path: str, existing_chunks: List[Dict[str, Any]]
+) -> List[Dict[str, Any]]:
+    """
+    Load and concatenate content from an external JSON file to existing chunks.
+
+    Args:
+        json_file_path: Path to the external JSON file to load
+        existing_chunks: List of existing chunks to extend
+
+    Returns:
+        Extended list of chunks with external data appended
+    """
+    try:
+        with open(json_file_path, "r", encoding="utf-8") as f:
+            external_data = json.load(f)
+
+        if isinstance(external_data, list):
+            existing_chunks.extend(external_data)
+            print(f"➕ Đã thêm {len(external_data)} chunks từ {json_file_path}")
+            print(f"📊 Tổng cộng sau khi ghép: {len(existing_chunks)} chunks")
+        else:
+            print(f"⚠️ Cảnh báo: {json_file_path} không phải là array, bỏ qua việc ghép")
+
+    except FileNotFoundError:
+        print(f"⚠️ Không tìm thấy file {json_file_path}, tiếp tục với dữ liệu hiện tại")
+    except json.JSONDecodeError as e:
+        print(f"❌ Lỗi đọc JSON từ {json_file_path}: {e}")
+
+    return existing_chunks
 
 
 class LandLawChunkerFinal:
@@ -596,7 +629,7 @@ class LandLawChunkerFinal:
 # ==========================================
 if __name__ == "__main__":
     # Thay tên file PDF của bạn vào đây
-    PDF_FILE = "133-vbhn-vpqh.pdf"
+    PDF_FILE = "./data/133-vbhn-vpqh.pdf"
 
     try:
         parser = LandLawChunkerFinal(PDF_FILE)
@@ -609,29 +642,11 @@ if __name__ == "__main__":
             print(f"🗑️ Đã xóa item cuối cùng. Còn lại: {len(final_data)} chunks")
 
         # Load and concatenate content from law_content_page_128.json
-        EXTERNAL_JSON_FILE = "law_content_page_128.json"
-        try:
-            with open(EXTERNAL_JSON_FILE, "r", encoding="utf-8") as f:
-                external_data = json.load(f)
-
-            if isinstance(external_data, list):
-                final_data.extend(external_data)
-                print(f"➕ Đã thêm {len(external_data)} chunks từ {EXTERNAL_JSON_FILE}")
-                print(f"📊 Tổng cộng sau khi ghép: {len(final_data)} chunks")
-            else:
-                print(
-                    f"⚠️ Cảnh báo: {EXTERNAL_JSON_FILE} không phải là array, bỏ qua việc ghép"
-                )
-
-        except FileNotFoundError:
-            print(
-                f"⚠️ Không tìm thấy file {EXTERNAL_JSON_FILE}, tiếp tục với dữ liệu hiện tại"
-            )
-        except json.JSONDecodeError as e:
-            print(f"❌ Lỗi đọc JSON từ {EXTERNAL_JSON_FILE}: {e}")
+        EXTERNAL_JSON_FILE = "./data/law_content_page_128.json"
+        final_data = load_and_concatenate_external_json(EXTERNAL_JSON_FILE, final_data)
 
         # Xuất kết quả
-        OUTPUT_FILE = "land_law_chunks_final.json"
+        OUTPUT_FILE = "./data/land_law_chunks_final.json"
         with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
             json.dump(final_data, f, ensure_ascii=False, indent=2)
 

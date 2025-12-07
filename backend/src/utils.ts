@@ -37,6 +37,8 @@ export async function getWeaviateClient(
     'grpc-weaviate.hanu-nus.com'
   const apiKey = weaviateApiKey || process.env.WEAVIATE_API_KEY || 'admin-key'
 
+  // const client = await weaviate.connectToLocal()
+
   // Extract hostname from URL (remove https:// or http://)
   const httpHost = url.replace(/^https?:\/\//, '')
   const grpcHost = grpcUrl.replace(/^https?:\/\//, '')

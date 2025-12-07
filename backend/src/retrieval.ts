@@ -11,10 +11,7 @@ import { WeaviateStore } from '@langchain/weaviate'
 import { getWeaviateClient } from './utils.js'
 import { getEmbeddingsModel } from './embeddings.js'
 import { getBaseConfiguration } from './configuration.js'
-import {
-  OLLAMA_BASE_URL,
-  WEAVIATE_GENERAL_GUIDES_AND_TUTORIALS_INDEX_NAME,
-} from './constants.js'
+import { OLLAMA_BASE_URL, WEAVIATE_GENERAL_LAND_LAW_VN } from './constants.js'
 
 const WEAVIATE_URL = process.env.WEAVIATE_URL
 const WEAVIATE_GRPC_URL = process.env.WEAVIATE_GRPC_URL
@@ -47,9 +44,12 @@ export async function makeWeaviateRetriever(
     )
   }
 
+  const indexName = WEAVIATE_GENERAL_LAND_LAW_VN
+  console.log(`Using Weaviate collection for retrieval: ${indexName}`)
+
   const store = new WeaviateStore(embeddings, {
     client,
-    indexName: WEAVIATE_GENERAL_GUIDES_AND_TUTORIALS_INDEX_NAME,
+    indexName,
     textKey: 'text',
     metadataKeys: ['source', 'title'],
   })
