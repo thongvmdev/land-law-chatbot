@@ -11,7 +11,7 @@ export const WEAVIATE_GENERAL_GUIDES_AND_TUTORIALS_INDEX_NAME =
 // Google embeddings index names (3072 dimensions)
 export const WEAVIATE_DOCS_INDEX_NAME_GOOGLE =
   'LangChain_Combined_Docs_google_gemini_embedding_001'
-export const WEAVIATE_GENERAL_LAND_LAW_VN = 'WEAVIATE_GENERAL_LAND_LAW_VN'
+export const WEAVIATE_GENERAL_LAND_LAW_VN = 'LandLaw2024Vn'
 
 // Ollama configuration
 export const OLLAMA_BASE_URL =

@@ -4,13 +4,15 @@
  * Supports:
  * - ollama/nomic-embed-text: Local Ollama embeddings with 2K context window
  * - openai/*: OpenAI embeddings
+ * - cloudflare/*: Cloudflare Workers AI embeddings
  * - weaviate/*: Legacy Weaviate built-in vectorizer (deprecated)
  */
 
 import { Embeddings } from '@langchain/core/embeddings'
 import { OpenAIEmbeddings } from '@langchain/openai'
 import { OllamaEmbeddings } from '@langchain/ollama'
-import { OLLAMA_BASE_URL } from './constants.js'
+import { CloudflareEmbeddings } from './cloudflare.js'
+import { OLLAMA_BASE_URL } from '../constants.js'
 
 /**
  * Get embeddings model based on provider and model name.
@@ -25,7 +27,6 @@ export function getEmbeddingsModel(
   baseUrl: string = OLLAMA_BASE_URL,
 ): Embeddings | null {
   const ollamaApiKey = process.env.OLLAMA_API_KEY || ''
-
   const modelSpec = model || process.env.EMBEDDING_MODEL
 
   const [provider, modelName] = modelSpec?.split('/', 2) || []
@@ -46,6 +47,22 @@ export function getEmbeddingsModel(
       return new OpenAIEmbeddings({
         model: modelName,
         batchSize: 200,
+      })
+
+    case 'cloudflare':
+      const accountId = process.env.CLOUDFLARE_ACCOUNT_ID
+      const apiToken = process.env.CLOUDFLARE_API_TOKEN
+
+      if (!accountId || !apiToken) {
+        throw new Error(
+          'CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN are required for Cloudflare embeddings',
+        )
+      }
+
+      return new CloudflareEmbeddings({
+        accountId,
+        apiToken,
+        model: modelName || '@cf/qwen/qwen3-embedding-0.6b',
       })
 
     case 'weaviate':

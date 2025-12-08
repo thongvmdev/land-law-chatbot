@@ -4,34 +4,74 @@ import json
 from typing import List, Dict, Any
 
 
-def load_and_concatenate_external_json(
-    json_file_path: str, existing_chunks: List[Dict[str, Any]]
+def update_article_260_content(
+    existing_chunks: List[Dict[str, Any]],
 ) -> List[Dict[str, Any]]:
     """
-    Load and concatenate content from an external JSON file to existing chunks.
+    Update Article 260 content by removing incomplete text and adding complete clauses 12-16.
 
     Args:
-        json_file_path: Path to the external JSON file to load
-        existing_chunks: List of existing chunks to extend
+        existing_chunks: List of existing chunks to update
 
     Returns:
-        Extended list of chunks with external data appended
+        Updated list of chunks with Article 260 content fixed
     """
-    try:
-        with open(json_file_path, "r", encoding="utf-8") as f:
-            external_data = json.load(f)
+    import re
 
-        if isinstance(external_data, list):
-            existing_chunks.extend(external_data)
-            print(f"➕ Đã thêm {len(external_data)} chunks từ {json_file_path}")
-            print(f"📊 Tổng cộng sau khi ghép: {len(existing_chunks)} chunks")
-        else:
-            print(f"⚠️ Cảnh báo: {json_file_path} không phải là array, bỏ qua việc ghép")
+    # Additional content for clauses 12-16 (normalized format)
+    additional_content_raw = """
+    Khoản 12: Người sử dụng đất được Nhà nước cho thuê đất mà đã lựa chọn hình thức cho thuê đất trả tiền thuê đất hàng năm hoặc cho thuê đất trả tiền thuê đất một lần cho cả thời gian thuê trước ngày Luật này có hiệu lực thì hành thi tiếp tục sử dụng đất theo hình thức thuê đất đã lựa chọn trong thời hạn sử dụng đất còn lại, trừ trường hợp quy định tại Điều 30 của Luật này. 
+    Khoản 13: Người sử dụng đất đã tự nguyện ứng trước kinh phí bồi thường, hỗ trợ, tái định cư theo phương án bồi thường, hỗ trợ, tái định cư đã được cơ quan có thẩm quyền phê duyệt trước ngày Luật này có hiệu lực thi hành thì được hoàn trả bằng hình thức trừ vào tiền sử dụng đất, tiền thuê đất phải nộp theo quy định của pháp luật về đất đai trước ngày Luật này có hiệu lực thi hành. 
+    Khoản 14: Trường hợp tổ chức kinh tế được miễn tiền sử dụng đất, miễn tiền thuê đất trước ngày Luật này có hiệu lực thi hành mà nay chuyển nhượng, góp vốn bằng quyền sử dụng đất thì thực hiện quyền và nghĩa vụ theo quy định của Luật này. 
+    Khoản 15: Cá nhân là người dân tộc thiểu số được Nhà nước giao đất, cho thuê đất theo chính sách hỗ trợ đất đai đối với đồng bào dân tộc thiểu số theo quy định của pháp luật trước ngày Luật này có hiệu lực thi hành mà đủ điều kiện được hưởng chính sách hỗ trợ đất đai đối với đồng bào dân tộc thiểu số theo quy định của Luật này thì được hưởng chính sách hỗ trợ về đất đai quy định của Luật này. 
+    Khoản 16: Doanh nghiệp có vốn đầu tư nước ngoài theo quy định của Luật Kinh doanh bất động sản số 66/2014/QH13 đã được sửa đổi, bổ sung một số điều theo Luật số 61/2020/QH14 đang thực hiện thủ tục nhận chuyển nhượng toàn bộ hoặc một phần dự án bất động sản nhưng đến ngày Luật này có hiệu lực thi hành mà chưa hoàn thành các thủ tục về đất đai đối với dự án hoặc phần dự án nhận chuyển nhượng thì cơ quan nhà nước có thẩm quyền thực hiện thủ tục giao đất, cho thuê đất cho bên nhận chuyển nhượng, cấp Giấy chứng nhận quyền sử dụng đất, quyền sở hữu tài sản gắn liền với đất theo quy định của Luật này. Bên nhận chuyển nhượng toàn bộ hoặc một phần dự án bất động sản được kế thừa quyền và nghĩa vụ về đất đai của bên chuyển nhượng dự án.
+    """
 
-    except FileNotFoundError:
-        print(f"⚠️ Không tìm thấy file {json_file_path}, tiếp tục với dữ liệu hiện tại")
-    except json.JSONDecodeError as e:
-        print(f"❌ Lỗi đọc JSON từ {json_file_path}: {e}")
+    # Normalize format: "Khoản 12:" -> "12."
+    normalized_content = (
+        re.sub(r"Khoản (\d+):", r"\1.", additional_content_raw)
+        .replace("\n", "")
+        .strip()
+    )
+    # Clean up extra whitespace
+    normalized_content = re.sub(r"\s+", " ", normalized_content)
+
+    # Configuration
+    TARGET_ARTICLE_ID = "260"
+    TEXT_TO_REMOVE = (
+        "12. Người sử dụng đất được Nhà nước cho thuê đất mà đã lựa chọn hình thức"
+    )
+
+    updated = False
+    for chunk in existing_chunks:
+        # Find Article 260 chunk
+        if chunk.get("metadata", {}).get("article_id") == TARGET_ARTICLE_ID:
+            content = chunk["page_content"]
+
+            # Check if the incomplete text exists
+            if TEXT_TO_REMOVE in content:
+                print(f"✅ Đã tìm thấy Điều 260 và đoạn nội dung cần thay thế.")
+
+                # 1. Remove the incomplete text
+                clean_content = content.replace(TEXT_TO_REMOVE, "").strip()
+
+                # 2. Append the complete content
+                new_full_content = f"{clean_content} {normalized_content}"
+                chunk["page_content"] = new_full_content
+
+                # 3. Update metadata: Add page 218 to page numbers
+                if 218 not in chunk["metadata"]["page_number"]:
+                    chunk["metadata"]["page_number"].append(218)
+                    chunk["metadata"]["page_number"].sort()
+
+                updated = True
+                print(f"🔄 Đã cập nhật nội dung cho Điều 260 (Thêm Khoản 12-16).")
+                break
+
+    if not updated:
+        print(
+            f"⚠️ Không tìm thấy đoạn text cần xóa trong Điều 260 hoặc đã được cập nhật trước đó."
+        )
 
     return existing_chunks
 
@@ -406,6 +446,49 @@ class LandLawChunkerFinal:
 
         return results
 
+    def recursive_no_nsplit(self, article_dict, base_offset):
+        """
+        [MODIFIED FOR QWEN-EMBEDDING]
+        Chiến lược: NO SPLIT (Không chia nhỏ)
+        - Luôn giữ nguyên toàn bộ nội dung Điều luật thành 1 chunk duy nhất.
+        - Tận dụng Context Window 32k của Qwen để hiểu toàn vẹn ngữ cảnh.
+        """
+        full_text = article_dict["content"]
+        article_title = article_dict["title"]
+        article_id = article_dict["id"]
+
+        # 1. Tạo text sạch để lưu DB
+        # Format: "Điều X. Tiêu đề | Nội dung chi tiết..."
+        final_db_text = self.clean_text_for_embedding(f"{article_title} | {full_text}")
+
+        # 2. Tính toán metadata (Trang, Tọa độ, Footnote)
+        # Vì giữ nguyên bài dài, ta lấy tọa độ dựa trên 100 ký tự đầu để định vị trang bắt đầu
+        abs_start = base_offset
+        abs_end = base_offset + len(full_text)
+
+        pgs, coords = self.get_coordinates_by_offset(
+            full_text[:100], abs_start, abs_end
+        )
+
+        footnotes_str = self._lookup_footnotes(pgs)
+
+        chunk_id = f"law_{self.law_id}_art_{article_id}"
+
+        # 3. Trả về danh sách chứa ĐÚNG 1 chunk
+        return [
+            {
+                "page_content": final_db_text,
+                "metadata": {
+                    **article_dict["metadata"],
+                    "chunk_id": chunk_id,
+                    "chunk_type": "full_article",  # Đánh dấu là full bài
+                    "page_number": pgs,
+                    "coordinates": coords,
+                    "chunk_footnotes": footnotes_str,
+                },
+            }
+        ]
+
     def _extract_article_info(self, raw_article_text):
         """
         Hàm helper: Tách text thô của một Điều luật thành 3 phần:
@@ -591,8 +674,7 @@ class LandLawChunkerFinal:
                     "article_id": art_id,
                     "article_title": full_art_title,
                     "topic": "legal_document",  # Placeholder
-                    "source_file": self.pdf_path.split("/")[-1],
-                    "footnotes": "",  # Placeholder cho tương lai
+                    "source": self.pdf_path.split("/")[-1],
                 }
 
                 # Tinh chỉnh offset truyền vào recursive_split
@@ -600,7 +682,7 @@ class LandLawChunkerFinal:
                 final_body_offset = article_global_start + body_rel_offset
 
                 # Gọi hàm cắt
-                chunks = self.recursive_split(
+                chunks = self.recursive_no_nsplit(
                     {
                         "id": art_id,
                         "title": full_art_title,
@@ -635,15 +717,8 @@ if __name__ == "__main__":
         parser = LandLawChunkerFinal(PDF_FILE)
         final_data = parser.process()
 
-        # Page 218 is image, so fitz can not load content, temp handle this way
-        # Remove the last item from final_data
-        if final_data:
-            final_data.pop()
-            print(f"🗑️ Đã xóa item cuối cùng. Còn lại: {len(final_data)} chunks")
-
-        # Load and concatenate content from law_content_page_128.json
-        EXTERNAL_JSON_FILE = "./data/law_content_page_128.json"
-        final_data = load_and_concatenate_external_json(EXTERNAL_JSON_FILE, final_data)
+        # Update Article 260 content with complete clauses 12-16
+        final_data = update_article_260_content(final_data)
 
         # Xuất kết quả
         OUTPUT_FILE = "./data/land_law_chunks_final.json"

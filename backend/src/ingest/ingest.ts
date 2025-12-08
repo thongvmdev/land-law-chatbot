@@ -2,10 +2,10 @@ import 'dotenv/config'
 
 import { PostgresRecordManager } from '@langchain/community/indexes/postgres'
 import { getWeaviateClient } from '../utils.js'
-import { getEmbeddingsModel } from '../embeddings.js'
+import { getEmbeddingsModel } from '../embeddings'
 import { OLLAMA_BASE_EMBEDDING_DOCS_URL } from '../constants.js'
 import { Document } from '@langchain/core/documents'
-
+import omit from 'lodash/omit'
 import {
   createRecordManager,
   createWeaviateVectorStore,
@@ -35,8 +35,7 @@ interface ParsedChunk {
     article_id: string
     article_title: string
     topic: string
-    source_file: string
-    footnotes: string
+    source: string
     chunk_id: string
     chunk_type: string
     clause_id?: string | null
@@ -58,6 +57,8 @@ interface ParseResponse {
 interface ParseRequest {
   max_pages?: number | null
 }
+
+type ParsedChunkMetadata = ParsedChunk['metadata']
 
 /**
  * Fetch chunks from the Land Law parser service.
@@ -91,7 +92,7 @@ export async function fetchLandLawChunksFromParser(
       )
     }
 
-    const data: ParseResponse = await response.json()
+    const data = (await response.json()) as ParseResponse
 
     if (!data.success) {
       throw new Error(`Parser service returned error: ${data.message}`)
@@ -106,41 +107,19 @@ export async function fetchLandLawChunksFromParser(
     const documents = data.chunks.map((chunk) => {
       // Map parser metadata to LangChain document metadata
       // Ensure required fields (source, title) are present
-      const metadata: Record<string, unknown> = {
-        ...chunk.metadata,
-        source: chunk.metadata.source_file || '133-vbhn-vpqh.pdf',
-        title:
-          chunk.metadata.article_title ||
-          chunk.metadata.chapter_title ||
-          'Land Law Document',
-      }
-
-      // Convert complex coordinates array to string format for Weaviate storage
-      // Weaviate cannot store nested objects/arrays, so we serialize them
-      if (
-        chunk.metadata.coordinates &&
-        Array.isArray(chunk.metadata.coordinates)
-      ) {
-        try {
-          metadata.coordinates = JSON.stringify(chunk.metadata.coordinates)
-        } catch (error) {
-          console.warn('Failed to serialize coordinates:', error)
-          metadata.coordinates = '[]'
-        }
-      }
-
-      // Also convert page_number array to ensure it's stored properly
-      if (
-        chunk.metadata.page_number &&
-        Array.isArray(chunk.metadata.page_number)
-      ) {
-        // Keep as array since Weaviate supports int[] type
-        metadata.page_number = chunk.metadata.page_number
-      }
+      const metadata: Record<string, unknown> = omit(
+        {
+          ...chunk.metadata,
+          source: chunk.metadata.source || '133-vbhn-vpqh.pdf',
+          title: chunk.metadata.article_title || '',
+          coordinates: JSON.stringify(chunk?.metadata?.coordinates || []),
+        },
+        ['article_title'] as (keyof ParsedChunkMetadata)[],
+      )
 
       // Handle null values that Weaviate filters out
       // Convert null values to empty strings to ensure fields are always present in schema
-      const fieldsToPreserve: (keyof ParsedChunk['metadata'])[] = [
+      const fieldsToPreserve: (keyof ParsedChunkMetadata)[] = [
         'point_id',
         'clause_id',
         'section_id',
@@ -208,7 +187,7 @@ export async function ingestDocs(): Promise<void> {
     console.log(`✓ Loaded ${chunks.length} documents successfully`)
 
     console.log('Writing chunks to file...')
-    await writeDocumentsToJsonFile(chunks, 'chunks_js.json', 'chunks')
+    await writeDocumentsToJsonFile(chunks, 'chunks_js_111.json', 'chunks')
 
     ensureRequiredMetadata(chunks)
 

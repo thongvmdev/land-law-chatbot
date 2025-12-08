@@ -21,11 +21,11 @@ export const BaseConfigurationSchema = z.object({
   /**
    * Name of the embedding model to use.
    * Must be a valid embedding model name.
-   * @default "ollama/nomic-embed-text"
+   * @default "cloudflare/qwen3-embedding-0.6b"
    */
   embeddingModel: z
     .string()
-    .default(process.env.EMBEDDING_MODEL || "ollama/nomic-embed-text")
+    .default(process.env.EMBEDDING_MODEL || "cloudflare/qwen3-embedding-0.6b")
     .describe("Name of the embedding model to use"),
 
   /**

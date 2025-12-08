@@ -216,10 +216,11 @@ export async function indexDocumentsInVectorStore(
   documents: Document[],
   vectorStore: WeaviateStore,
   recordManager: PostgresRecordManager,
+  batchSize: number = 50,
 ): Promise<any> {
-  // Use smaller batch size to avoid HTTP 413 errors
-  const batchSize = parseInt(process.env.WEAVIATE_BATCH_SIZE || '50', 10)
-  console.log(`Using batch size: ${batchSize} documents per batch`)
+  console.log(
+    `Using batch size: ${batchSize} documents (${documents.length}) per batch`,
+  )
 
   try {
     const indexingStats = await index({

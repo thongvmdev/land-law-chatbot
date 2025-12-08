@@ -14,7 +14,10 @@ import uvicorn
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
-from land_law_parser import LandLawChunkerFinal, load_and_concatenate_external_json
+from land_law_parser import (
+    LandLawChunkerFinal,
+    update_article_260_content,
+)
 
 
 # Pydantic models for request/response
@@ -37,8 +40,6 @@ class ChunkMetadata(BaseModel):
     article_id: str
     article_title: str
     topic: str
-    source_file: str
-    footnotes: str
     chunk_id: str
     chunk_type: str
     clause_id: Optional[str] = None
@@ -121,9 +122,7 @@ async def process_pdf_async(max_pages: Optional[int] = None) -> List[Dict[str, A
     loop = asyncio.get_event_loop()
     chunks = await loop.run_in_executor(None, _process_pdf)
 
-    # Load and concatenate content from law_content_page_128.json
-    EXTERNAL_JSON_FILE = "./data/law_content_page_128.json"
-    chunks = load_and_concatenate_external_json(EXTERNAL_JSON_FILE, chunks)
+    chunks = update_article_260_content(chunks)
 
     return chunks
 
