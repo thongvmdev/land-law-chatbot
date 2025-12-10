@@ -9,7 +9,7 @@ import { VectorStoreRetriever } from '@langchain/core/vectorstores'
 import { RunnableConfig } from '@langchain/core/runnables'
 import { WeaviateStore } from '@langchain/weaviate'
 import { getWeaviateClient } from './utils.js'
-import { getEmbeddingsModel } from './embeddings.js'
+import { getEmbeddingsModel } from './embeddings'
 import { getBaseConfiguration } from './configuration.js'
 import { OLLAMA_BASE_URL, WEAVIATE_GENERAL_LAND_LAW_VN } from './constants.js'
 
