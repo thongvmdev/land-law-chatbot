@@ -59,11 +59,22 @@ class ParsedChunk(BaseModel):
     )
 
 
+class StructurePosition(BaseModel):
+    """Position information for structure items."""
+
+    start: int = Field(..., description="Start position in text")
+    end: int = Field(..., description="End position in text")
+
+
 class ParseResponse(BaseModel):
     """Response model for PDF parsing results."""
 
     success: bool = Field(..., description="Whether the parsing was successful")
     chunks: List[ParsedChunk] = Field(..., description="List of parsed chunks")
+    structure: List[Dict[str, Any]] = Field(
+        ...,
+        description="Hierarchical document structure (chapters with sections and articles)",
+    )
     total_chunks: int = Field(..., description="Total number of chunks parsed")
     message: str = Field(..., description="Status message")
 
@@ -100,7 +111,9 @@ def convert_chunk_to_response_model(chunk: Dict[str, Any]) -> ParsedChunk:
     )
 
 
-async def process_pdf_async(max_pages: Optional[int] = None) -> List[Dict[str, Any]]:
+async def process_pdf_async(
+    max_pages: Optional[int] = None,
+) -> Dict[str, Any]:
     """
     Process the Land Law PDF file asynchronously using the existing parser.
 
@@ -108,7 +121,7 @@ async def process_pdf_async(max_pages: Optional[int] = None) -> List[Dict[str, A
         max_pages: Optional maximum number of pages to process
 
     Returns:
-        List of parsed chunks
+        Dictionary with 'chunks' and 'structure' keys
     """
     # Fixed path to the Land Law PDF file
     pdf_path = "./data/133-vbhn-vpqh.pdf"
@@ -120,11 +133,16 @@ async def process_pdf_async(max_pages: Optional[int] = None) -> List[Dict[str, A
 
     # Run the synchronous parser in a thread pool to avoid blocking
     loop = asyncio.get_event_loop()
-    chunks = await loop.run_in_executor(None, _process_pdf)
+    result = await loop.run_in_executor(None, _process_pdf)
 
-    chunks = update_article_260_content(chunks)
+    # Extract chunks and structure from result
+    chunks = result["chunks"]
+    structure = result["structure"]
 
-    return chunks
+    # Update Article 260 content
+    updated_chunks = update_article_260_content(chunks)
+
+    return {"chunks": updated_chunks, "structure": structure}
 
 
 @app.post("/parse-pdf", response_model=ParseResponse)
@@ -136,7 +154,7 @@ async def parse_pdf(request: ParseRequest):
         request: ParseRequest containing optional max_pages
 
     Returns:
-        ParseResponse with parsed chunks
+        ParseResponse with parsed chunks and document structure
     """
     try:
         # Fixed PDF file path
@@ -149,7 +167,11 @@ async def parse_pdf(request: ParseRequest):
             )
 
         # Process the PDF
-        chunks = await process_pdf_async(request.max_pages)
+        result = await process_pdf_async(request.max_pages)
+
+        # Extract chunks and structure
+        chunks = result["chunks"]
+        structure = result["structure"]
 
         # Convert chunks to response format
         response_chunks = [convert_chunk_to_response_model(chunk) for chunk in chunks]
@@ -157,8 +179,9 @@ async def parse_pdf(request: ParseRequest):
         return ParseResponse(
             success=True,
             chunks=response_chunks,
+            structure=structure,
             total_chunks=len(response_chunks),
-            message=f"Successfully parsed {len(response_chunks)} chunks from Land Law PDF",
+            message=f"Successfully parsed {len(response_chunks)} chunks and {len(structure)} chapters from Land Law PDF",
         )
 
     except HTTPException:

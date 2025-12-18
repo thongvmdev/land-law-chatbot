@@ -11,7 +11,6 @@
 import { Embeddings } from '@langchain/core/embeddings'
 import { OpenAIEmbeddings } from '@langchain/openai'
 import { OllamaEmbeddings } from '@langchain/ollama'
-import { CloudflareEmbeddings } from './cloudflare.js'
 import { OLLAMA_BASE_URL } from '../constants.js'
 
 /**
@@ -30,7 +29,7 @@ export function getEmbeddingsModel(
   const modelSpec = model || process.env.EMBEDDING_MODEL
 
   const [provider, modelName] = modelSpec?.split('/', 2) || []
-  console.log('  - provider:', { provider, modelName })
+  console.log('  - provider:', { provider, modelName, baseUrl })
 
   switch (provider.toLowerCase()) {
     case 'ollama':
@@ -47,22 +46,6 @@ export function getEmbeddingsModel(
       return new OpenAIEmbeddings({
         model: modelName,
         batchSize: 200,
-      })
-
-    case 'cloudflare':
-      const accountId = process.env.CLOUDFLARE_ACCOUNT_ID
-      const apiToken = process.env.CLOUDFLARE_API_TOKEN
-
-      if (!accountId || !apiToken) {
-        throw new Error(
-          'CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN are required for Cloudflare embeddings',
-        )
-      }
-
-      return new CloudflareEmbeddings({
-        accountId,
-        apiToken,
-        model: modelName || '@cf/qwen/qwen3-embedding-0.6b',
       })
 
     case 'weaviate':

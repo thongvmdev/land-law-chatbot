@@ -18,8 +18,8 @@ import {
   type EvaluateOptions,
 } from 'langsmith/evaluation'
 import { z } from 'zod'
-import { graph } from '../../src/retrieval_graph/graph.js'
 import { formatDocs, loadChatModel } from '../../src/utils.js'
+import { landLawGraph } from '../../src/graph'
 
 // Dataset and experiment configuration
 const DATASET_NAME = 'small-chatlangchain-dataset'
@@ -196,7 +196,7 @@ async function evaluateQAContext(
 async function runGraph(
   inputs: Record<string, any>,
 ): Promise<Record<string, any>> {
-  const results = await graph.invoke({
+  const results = await landLawGraph.invoke({
     messages: [new HumanMessage(inputs.question)],
   })
   return results

@@ -87,6 +87,7 @@ class LandLawChunkerFinal:
 
         self.law_id = "133/VBHN-VPQH"
         self.chunks = []
+        self.structure = []  # Store main document structure
 
         # State variables (Hierarchy)
         self.current_chapter = {"id": None, "title": None}
@@ -136,6 +137,67 @@ class LandLawChunkerFinal:
                         footnote_text += line_note + " "  # Nối footnote thành dòng dài
 
         return clean_text, footnote_text.strip()
+
+    def extract_structure_hierarchy(self, matches):
+        """
+        Trích xuất cấu trúc cây của văn bản luật từ kết quả Regex.
+        Returns: Hierarchical structure with chapters containing sections and articles,
+                 sections containing articles, and articles as leaf nodes.
+        """
+        structure = []  # List of chapters
+        current_chapter = None
+        current_section = None
+
+        for m in matches:
+            marker = m.group(1).strip()  # VD: Chương I, Mục 1, Điều 1.
+            title = m.group(3).strip()  # VD: Phạm vi điều chỉnh
+
+            if marker.startswith("Chương"):
+                parts = marker.split()
+                c_id = parts[1] if len(parts) > 1 else "Unknown"
+                current_chapter = {
+                    "type": "chapter",
+                    # "id": c_id,
+                    "title": f"{marker}: {title}",
+                    "children": [],  # Will contain sections and articles
+                }
+                current_section = None  # Reset section when new chapter starts
+                structure.append(current_chapter)
+
+            elif marker.startswith("Mục"):
+                parts = marker.split()
+                s_id = parts[1] if len(parts) > 1 else "Unknown"
+                current_section = {
+                    "type": "section",
+                    # "id": s_id,
+                    "title": f"{marker}: {title}",
+                    "children": [],  # Will contain articles
+                }
+                # Add section to current chapter's children
+                if current_chapter:
+                    current_chapter["children"].append(current_section)
+                else:
+                    # If no chapter, add to structure directly
+                    structure.append(current_section)
+
+            elif marker.startswith("Điều"):
+                art_id_match = re.search(r"Điều\s+(\d+)", marker)
+                art_id = art_id_match.group(1) if art_id_match else "Unknown"
+                article = {
+                    "type": "article",
+                    # "id": art_id,
+                    "title": f"{marker} {title}",
+                }
+                # Add article to current section's children if exists, otherwise to chapter's children
+                if current_section:
+                    current_section["children"].append(article)
+                elif current_chapter:
+                    current_chapter["children"].append(article)
+                else:
+                    # If no chapter or section, add to structure directly
+                    structure.append(article)
+
+        return structure
 
     def log_structure_hierarchy(self, matches):
         """
@@ -620,6 +682,8 @@ class LandLawChunkerFinal:
 
         matches = list(re.finditer(hierarchy_pattern, full_text))
         self.log_structure_hierarchy(matches)
+        # Extract and store main document structure
+        self.structure = self.extract_structure_hierarchy(matches)
         print(f"⏳ Bắt đầu xử lý chi tiết...\n")
 
         for i, match in enumerate(matches):
@@ -703,7 +767,7 @@ class LandLawChunkerFinal:
                 )
 
         print(f"\n✅ Hoàn thành! Tổng cộng {len(self.chunks)} chunks được tạo ra.")
-        return self.chunks
+        return {"chunks": self.chunks, "structure": self.structure}
 
 
 # ==========================================
@@ -715,10 +779,17 @@ if __name__ == "__main__":
 
     try:
         parser = LandLawChunkerFinal(PDF_FILE)
-        final_data = parser.process()
+        result = parser.process()
+
+        # Extract chunks and structure
+        chunks = result["chunks"]
+        structure = result["structure"]
 
         # Update Article 260 content with complete clauses 12-16
-        final_data = update_article_260_content(final_data)
+        updated_chunks = update_article_260_content(chunks)
+
+        # Prepare final data with both chunks and structure
+        final_data = {"chunks": updated_chunks, "structure": structure}
 
         # Xuất kết quả
         OUTPUT_FILE = "./data/land_law_chunks_final.json"
@@ -726,6 +797,8 @@ if __name__ == "__main__":
             json.dump(final_data, f, ensure_ascii=False, indent=2)
 
         print(f"💾 Dữ liệu đã được lưu vào: {OUTPUT_FILE}")
+        print(f"📊 Cấu trúc: {len(structure)} mục (Chương/Mục/Điều)")
+        print(f"📦 Chunks: {len(updated_chunks)} chunks")
 
     except Exception as e:
         print(f"❌ Lỗi: {e}")

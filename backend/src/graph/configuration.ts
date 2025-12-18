@@ -1,0 +1,145 @@
+/**
+ * Agent configuration for the Land Law Agentic Workflow.
+ *
+ * This module defines the configurable parameters for the land law agent,
+ * including model selections and Vietnamese prompt templates.
+ */
+
+import { RunnableConfig } from '@langchain/core/runnables'
+import { z } from 'zod'
+import { BaseConfigurationSchema } from '../configuration'
+
+/**
+ * Schema for metadata extraction
+ */
+export const MetadataFilterSchema = z.object({
+  article_id: z
+    .string()
+    .optional()
+    .nullable()
+    .describe(
+      "Số hiệu điều luật. VD: Nếu user hỏi 'Điều 260', trích xuất '260'.",
+    ),
+  chapter_id: z
+    .string()
+    .optional()
+    .nullable()
+    .describe(
+      "Số chương (số La Mã). VD: Nếu user hỏi 'Chương V', trích xuất 'V'.",
+    ),
+  section_id: z
+    .string()
+    .optional()
+    .nullable()
+    .describe("Số mục. VD: Nếu user hỏi 'Mục 1', trích xuất '1'."),
+})
+
+export type MetadataFilter = z.infer<typeof MetadataFilterSchema>
+
+/**
+ * Schema for document grading
+ */
+export const GraderSchema = z.object({
+  is_relevant: z
+    .boolean()
+    .describe(
+      'Tài liệu có liên quan đến câu hỏi không? true = có, false = không',
+    ),
+})
+
+export type Grader = z.infer<typeof GraderSchema>
+
+/**
+ * LandLawAgentConfiguration extends BaseConfiguration with agent-specific settings
+ */
+export const LandLawAgentConfigurationSchema = BaseConfigurationSchema.extend({
+  /**
+   * The language model used for metadata extraction and query processing.
+   * Should be in the form: provider/model-name.
+   * @default "groq/llama-3.1-8b-instant"
+   */
+  queryModel: z
+    .string()
+    .default('groq/qwen3-32b')
+    .describe(
+      'The language model used for query processing and metadata extraction',
+    ),
+
+  /**
+   * The language model used for generating final responses.
+   * Should be in the form: provider/model-name.
+   * @default "groq/llama-3.1-8b-instant"
+   */
+  responseModel: z
+    .string()
+    .default('groq/qwen3-32b')
+    .describe('The language model used for generating responses'),
+
+  /**
+   * Maximum number of query transformation retries
+   * @default 2
+   */
+  maxRetries: z
+    .number()
+    .min(0)
+    .max(5)
+    .default(2)
+    .describe('Maximum number of query transformation attempts'),
+
+  /**
+   * Temperature for query processing models
+   * @default 0
+   */
+  queryTemperature: z
+    .number()
+    .min(0)
+    .max(2)
+    .default(0)
+    .describe('Temperature for query processing (0 = deterministic)'),
+
+  /**
+   * Temperature for response generation
+   * @default 0.3
+   */
+  responseTemperature: z
+    .number()
+    .min(0)
+    .max(2)
+    .default(0.3)
+    .describe('Temperature for response generation (higher = more creative)'),
+})
+
+export type LandLawAgentConfiguration = z.infer<
+  typeof LandLawAgentConfigurationSchema
+>
+
+/**
+ * Extract land law agent configuration from RunnableConfig
+ *
+ * Reads from config.configurable to match LangGraph conventions
+ */
+export function getLandLawAgentConfiguration(
+  config?: RunnableConfig,
+): LandLawAgentConfiguration {
+  const configurable = config?.configurable || {}
+
+  // Convert snake_case to camelCase for all fields
+  const camelCased: Record<string, any> = {}
+
+  for (const [key, value] of Object.entries(configurable)) {
+    const camelKey = key.replace(/_([a-z])/g, (_, letter) =>
+      letter.toUpperCase(),
+    )
+    camelCased[camelKey] = value
+  }
+
+  // Parse and validate with defaults
+  return LandLawAgentConfigurationSchema.parse(camelCased)
+}
+
+/**
+ * Create a default configuration for testing
+ */
+export function getDefaultLandLawConfig(): LandLawAgentConfiguration {
+  return LandLawAgentConfigurationSchema.parse({})
+}

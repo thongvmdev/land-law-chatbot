@@ -1,5 +1,6 @@
 import 'dotenv/config'
 
+import { promises as fs } from 'fs'
 import { PostgresRecordManager } from '@langchain/community/indexes/postgres'
 import { getWeaviateClient } from '../utils.js'
 import { getEmbeddingsModel } from '../embeddings'
@@ -9,11 +10,12 @@ import omit from 'lodash/omit'
 import {
   createRecordManager,
   createWeaviateVectorStore,
-  ensureRequiredMetadata,
   indexDocumentsInVectorStore,
   logTotalVectorCount,
   writeDocumentsToJsonFile,
 } from './utils.js'
+import path from 'path'
+import { getBaseConfiguration } from '../configuration.js'
 
 const WEAVIATE_URL = process.env.WEAVIATE_URL
 const WEAVIATE_GRPC_URL = process.env.WEAVIATE_GRPC_URL
@@ -27,7 +29,7 @@ const PARSER_SERVICE_URL =
 interface ParsedChunk {
   page_content: string
   metadata: {
-    law_id: string
+    law_id?: string
     chapter_id?: string | null
     chapter_title?: string | null
     section_id?: string | null
@@ -51,6 +53,7 @@ interface ParseResponse {
   success: boolean
   chunks: ParsedChunk[]
   total_chunks: number
+  structure: Record<string, unknown>[]
   message: string
 }
 
@@ -58,7 +61,7 @@ interface ParseRequest {
   max_pages?: number | null
 }
 
-type ParsedChunkMetadata = ParsedChunk['metadata']
+export type ParsedChunkMetadata = ParsedChunk['metadata']
 
 /**
  * Fetch chunks from the Land Law parser service.
@@ -68,7 +71,7 @@ type ParsedChunkMetadata = ParsedChunk['metadata']
  */
 export async function fetchLandLawChunksFromParser(
   maxPages?: number | null,
-): Promise<Document[]> {
+): Promise<{ documents: Document[]; structure: Record<string, unknown>[] }> {
   const url = `${PARSER_SERVICE_URL}/parse-pdf`
   const requestBody: ParseRequest = {}
 
@@ -100,11 +103,13 @@ export async function fetchLandLawChunksFromParser(
 
     if (!data.chunks || data.chunks.length === 0) {
       console.warn('Parser service returned no chunks')
-      return []
+      return { documents: [], structure: [] }
     }
 
+    const { structure, chunks } = data
+
     // Convert parser chunks to LangChain Document format
-    const documents = data.chunks.map((chunk) => {
+    const documents = chunks.map((chunk) => {
       // Map parser metadata to LangChain document metadata
       // Ensure required fields (source, title) are present
       const metadata: Record<string, unknown> = omit(
@@ -114,14 +119,18 @@ export async function fetchLandLawChunksFromParser(
           title: chunk.metadata.article_title || '',
           coordinates: JSON.stringify(chunk?.metadata?.coordinates || []),
         },
-        ['article_title'] as (keyof ParsedChunkMetadata)[],
+        [
+          'article_title',
+          'clause_id',
+          'point_id',
+          'chunk_type',
+          'has_points',
+        ] as (keyof ParsedChunkMetadata)[],
       )
 
       // Handle null values that Weaviate filters out
       // Convert null values to empty strings to ensure fields are always present in schema
       const fieldsToPreserve: (keyof ParsedChunkMetadata)[] = [
-        'point_id',
-        'clause_id',
         'section_id',
         'section_title',
       ]
@@ -144,7 +153,7 @@ export async function fetchLandLawChunksFromParser(
 
     console.log(`✓ Fetched ${documents.length} chunks from parser service`)
 
-    return documents
+    return { documents, structure }
   } catch (error) {
     if (error instanceof Error) {
       throw new Error(
@@ -164,7 +173,7 @@ export async function ingestDocs(): Promise<void> {
 
   // Initialize embeddings model
   const embedding = getEmbeddingsModel(
-    'ollama/qwen3-embedding:0.6b',
+    getBaseConfiguration().embeddingModel,
     OLLAMA_BASE_EMBEDDING_DOCS_URL,
   )
 
@@ -183,13 +192,19 @@ export async function ingestDocs(): Promise<void> {
 
   try {
     console.log('Fetching documents from parser service...')
-    const chunks = await fetchLandLawChunksFromParser()
+    const { documents: chunks, structure } =
+      (await fetchLandLawChunksFromParser()) || { documents: [], structure: [] }
     console.log(`✓ Loaded ${chunks.length} documents successfully`)
 
     console.log('Writing chunks to file...')
-    await writeDocumentsToJsonFile(chunks, 'chunks_js_111.json', 'chunks')
+    await writeDocumentsToJsonFile(chunks, 'chunks_js_.json', 'chunks')
 
-    ensureRequiredMetadata(chunks)
+    console.log('Writing structure to file...')
+    await fs.writeFile(
+      path.join(process.cwd(), 'data', 'structure_.json'),
+      JSON.stringify(structure, null, 2),
+      'utf-8',
+    )
 
     const vectorStore = createWeaviateVectorStore(weaviateClient, embedding)
     recordManager = await createRecordManager()

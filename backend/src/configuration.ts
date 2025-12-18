@@ -4,15 +4,15 @@
  * This module defines the base configuration parameters for indexing and retrieval operations.
  */
 
-import { RunnableConfig } from "@langchain/core/runnables";
-import { z } from "zod";
+import { RunnableConfig } from '@langchain/core/runnables'
+import { z } from 'zod'
 
 /**
  * Schema for backwards-compatible model name mapping
  */
 const MODEL_NAME_TO_RESPONSE_MODEL: Record<string, string> = {
-  anthropic_claude_3_5_sonnet: "anthropic/claude-3-5-sonnet-20240620",
-};
+  anthropic_claude_3_5_sonnet: 'anthropic/claude-3-5-sonnet-20240620',
+}
 
 /**
  * BaseConfiguration schema using Zod for validation
@@ -25,82 +25,93 @@ export const BaseConfigurationSchema = z.object({
    */
   embeddingModel: z
     .string()
-    .default(process.env.EMBEDDING_MODEL || "cloudflare/qwen3-embedding-0.6b")
-    .describe("Name of the embedding model to use"),
+    .default('ollama/qwen3-embedding:0.6b')
+    .describe('Name of the embedding model to use'),
 
   /**
    * The vector store provider to use for retrieval.
    * @default "weaviate"
    */
   retrieverProvider: z
-    .enum(["weaviate"])
-    .default("weaviate")
-    .describe("The vector store provider to use for retrieval"),
+    .enum(['weaviate'])
+    .default('weaviate')
+    .describe('The vector store provider to use for retrieval'),
 
   /**
    * Additional keyword arguments to pass to the search function of the retriever.
    */
   searchKwargs: z
-    .record(z.any())
+    .record(z.string(), z.any())
     .default({})
-    .describe("Additional keyword arguments for the retriever search function"),
+    .describe('Additional keyword arguments for the retriever search function'),
 
   /**
    * The number of documents to retrieve (backwards compatibility).
    * Use searchKwargs instead.
    * @default 6
    */
-  k: z.number().default(6).describe("Number of documents to retrieve"),
-});
+  k: z.number().default(6).describe('Number of documents to retrieve'),
 
-export type BaseConfiguration = z.infer<typeof BaseConfigurationSchema>;
+  /**
+   * The type of search to perform.
+   * @default "similarity"
+   */
+  searchType: z
+    .enum(['similarity', 'mmr'])
+    .default('similarity')
+    .describe('The type of search to perform'),
+})
+
+export type BaseConfiguration = z.infer<typeof BaseConfigurationSchema>
 
 /**
  * Update configurable parameters for backwards compatibility
  */
 function updateConfigurableForBackwardsCompatibility(
-  configurable: Record<string, any>
+  configurable: Record<string, any>,
 ): Record<string, any> {
-  const update: Record<string, any> = {};
+  const update: Record<string, any> = {}
 
-  if ("k" in configurable) {
-    update.searchKwargs = { k: configurable.k };
+  if ('k' in configurable) {
+    update.searchKwargs = { k: configurable.k }
   }
 
-  if ("model_name" in configurable) {
+  if ('model_name' in configurable) {
     update.responseModel =
-      MODEL_NAME_TO_RESPONSE_MODEL[configurable.model_name] || configurable.model_name;
+      MODEL_NAME_TO_RESPONSE_MODEL[configurable.model_name] ||
+      configurable.model_name
   }
 
   if (Object.keys(update).length > 0) {
-    return { ...configurable, ...update };
+    return { ...configurable, ...update }
   }
 
-  return configurable;
+  return configurable
 }
 
 /**
  * Extract configuration from RunnableConfig
  */
-export function getBaseConfiguration(config?: RunnableConfig): BaseConfiguration {
-  const configurable = config?.configurable || {};
-  const updated = updateConfigurableForBackwardsCompatibility(configurable);
+export function getBaseConfiguration(
+  config?: RunnableConfig,
+): BaseConfiguration {
+  const configurable = config?.configurable || {}
+  const updated = updateConfigurableForBackwardsCompatibility(configurable)
 
   // Convert snake_case to camelCase for embedding_model
-  if ("embedding_model" in updated) {
-    updated.embeddingModel = updated.embedding_model;
-    delete updated.embedding_model;
+  if ('embedding_model' in updated) {
+    updated.embeddingModel = updated.embedding_model
+    delete updated.embedding_model
   }
-  if ("retriever_provider" in updated) {
-    updated.retrieverProvider = updated.retriever_provider;
-    delete updated.retriever_provider;
+  if ('retriever_provider' in updated) {
+    updated.retrieverProvider = updated.retriever_provider
+    delete updated.retriever_provider
   }
-  if ("search_kwargs" in updated) {
-    updated.searchKwargs = updated.search_kwargs;
-    delete updated.search_kwargs;
+  if ('search_kwargs' in updated) {
+    updated.searchKwargs = updated.search_kwargs
+    delete updated.search_kwargs
   }
 
   // Parse and validate with defaults
-  return BaseConfigurationSchema.parse(updated);
+  return BaseConfigurationSchema.parse(updated)
 }
-

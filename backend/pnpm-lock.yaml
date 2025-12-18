@@ -14,6 +14,9 @@ importers:
       '@langchain/anthropic':
         specifier: ^1.1.1
         version: 1.2.3(@langchain/core@1.1.4(openai@6.10.0(ws@8.18.3)(zod@4.1.13)))
+      '@langchain/cloudflare':
+        specifier: ^1.0.1
+        version: 1.0.1(@langchain/core@1.1.4(openai@6.10.0(ws@8.18.3)(zod@4.1.13)))
       '@langchain/community':
         specifier: ^1.0.4
         version: 1.0.7(@browserbasehq/sdk@2.6.0)(@browserbasehq/stagehand@1.14.0(@playwright/test@1.57.0)(deepmerge@4.3.1)(dotenv@16.6.1)(openai@6.10.0(ws@8.18.3)(zod@4.1.13))(zod@4.1.13))(@ibm-cloud/watsonx-ai@1.7.4)(@langchain/core@1.1.4(openai@6.10.0(ws@8.18.3)(zod@4.1.13)))(cheerio@1.1.2)(ibm-cloud-sdk-core@5.4.5)(jsdom@27.2.0)(jsonwebtoken@9.0.3)(lodash@4.17.21)(openai@6.10.0(ws@8.18.3)(zod@4.1.13))(pg@8.16.3)(playwright@1.57.0)(weaviate-client@3.10.0)(ws@8.18.3)
@@ -759,6 +762,12 @@ packages:
         optional: true
       typeorm:
         optional: true
+
+  '@langchain/cloudflare@1.0.1':
+    resolution: {integrity: sha512-Ym4rN8jDeGK7UJHiSnogNHzaNuKBiKKwvpDWZBtwjz6d5SQqYB9i05tPYubuxtHJMFBAdOiSGUVnZp92rp1uUg==}
+    engines: {node: '>=20'}
+    peerDependencies:
+      '@langchain/core': ^1.0.0
 
   '@langchain/community@1.0.7':
     resolution: {integrity: sha512-7buBpVfDWUmnJ5ZO2QY2u7NcRPUWA+il/SN06WtAuGpgtIEUAOi87jTGeMZoqVMUoks0i0fifFHefAQ3nYF7BQ==}
@@ -3817,6 +3826,11 @@ snapshots:
       - openai
       - ws
 
+  '@langchain/cloudflare@1.0.1(@langchain/core@1.1.4(openai@6.10.0(ws@8.18.3)(zod@4.1.13)))':
+    dependencies:
+      '@langchain/core': 1.1.4(openai@6.10.0(ws@8.18.3)(zod@4.1.13))
+      uuid: 10.0.0
+
   '@langchain/community@1.0.7(@browserbasehq/sdk@2.6.0)(@browserbasehq/stagehand@1.14.0(@playwright/test@1.57.0)(deepmerge@4.3.1)(dotenv@16.6.1)(openai@6.10.0(ws@8.18.3)(zod@4.1.13))(zod@4.1.13))(@ibm-cloud/watsonx-ai@1.7.4)(@langchain/core@1.1.4(openai@6.10.0(ws@8.18.3)(zod@4.1.13)))(cheerio@1.1.2)(ibm-cloud-sdk-core@5.4.5)(jsdom@27.2.0)(jsonwebtoken@9.0.3)(lodash@4.17.21)(openai@6.10.0(ws@8.18.3)(zod@4.1.13))(pg@8.16.3)(playwright@1.57.0)(weaviate-client@3.10.0)(ws@8.18.3)':
     dependencies:
       '@browserbasehq/stagehand': 1.14.0(@playwright/test@1.57.0)(deepmerge@4.3.1)(dotenv@16.6.1)(openai@6.10.0(ws@8.18.3)(zod@4.1.13))(zod@4.1.13)
@@ -5110,7 +5124,7 @@ snapshots:
       isstream: 0.1.2
       jsonwebtoken: 9.0.3
       mime-types: 2.1.35
-      retry-axios: 2.6.0(axios@1.13.2(debug@4.4.3))
+      retry-axios: 2.6.0(axios@1.13.2)
       tough-cookie: 4.1.4
     transitivePeerDependencies:
       - supports-color
@@ -5705,7 +5719,7 @@ snapshots:
 
   resolve-pkg-maps@1.0.0: {}
 
-  retry-axios@2.6.0(axios@1.13.2(debug@4.4.3)):
+  retry-axios@2.6.0(axios@1.13.2):
     dependencies:
       axios: 1.13.2(debug@4.4.3)
 

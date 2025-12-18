@@ -11,7 +11,7 @@ import { WeaviateStore } from '@langchain/weaviate'
 import { PostgresRecordManager } from '@langchain/community/indexes/postgres'
 import { index } from '@langchain/core/indexing'
 import { getWeaviateClient } from '../src/utils.js'
-import { getEmbeddingsModel } from '../src/embeddings.js'
+import { getEmbeddingsModel } from '../src/embeddings'
 import {
   OLLAMA_BASE_EMBEDDING_DOCS_URL,
   WEAVIATE_GENERAL_LAND_LAW_VN,

@@ -107,27 +107,6 @@ export async function splitAndFilterDocuments(
 }
 
 /**
- * Ensure required metadata fields exist in all documents.
- * Weaviate will error at query time if required attributes are missing.
- *
- * @param documents - Documents to validate
- */
-export function ensureRequiredMetadata(documents: Document[]): void {
-  console.log('Step 5/5: Ensuring metadata fields...')
-
-  for (const doc of documents) {
-    if (!doc.metadata.source) {
-      doc.metadata.source = ''
-    }
-    if (!doc.metadata.title) {
-      doc.metadata.title = ''
-    }
-  }
-
-  console.log('✓ Metadata fields validated')
-}
-
-/**
  * Create a Weaviate vector store instance.
  *
  * @param weaviateClient - Weaviate client
@@ -149,7 +128,6 @@ export function createWeaviateVectorStore(
       // Core document identification
       'source',
       'title',
-      'law_id',
       'article_id',
       'article_title',
       'chunk_id',

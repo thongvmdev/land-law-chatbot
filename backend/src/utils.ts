@@ -1,13 +1,3 @@
-/**
- * Shared utility functions used in the project.
- *
- * Functions:
- *   - getWeaviateClient: Create a Weaviate client connection
- *   - formatDocs: Convert documents to an xml-formatted string
- *   - loadChatModel: Load a chat model from a model name
- *   - reduceDocs: Document reducer for state management
- */
-
 import weaviate, { WeaviateClient } from 'weaviate-client'
 import { Document } from '@langchain/core/documents'
 import { BaseChatModel } from '@langchain/core/language_models/chat_models'
@@ -17,14 +7,6 @@ import { ChatGroq } from '@langchain/groq'
 import { ChatOllama } from '@langchain/ollama'
 import { v4 as uuidv4 } from 'uuid'
 
-/**
- * Create and connect to a Weaviate client.
- *
- * @param weaviateUrl - The Weaviate HTTP URL. If not provided, reads from WEAVIATE_URL env var.
- * @param weaviateGrpcUrl - The Weaviate gRPC URL. If not provided, uses weaviateUrl.
- * @param weaviateApiKey - The Weaviate API key. If not provided, reads from WEAVIATE_API_KEY env var.
- * @returns A connected Weaviate client
- */
 export async function getWeaviateClient(
   weaviateUrl?: string,
   weaviateGrpcUrl?: string,
@@ -37,9 +19,6 @@ export async function getWeaviateClient(
     'grpc-weaviate.hanu-nus.com'
   const apiKey = weaviateApiKey || process.env.WEAVIATE_API_KEY || 'admin-key'
 
-  // const client = await weaviate.connectToLocal()
-
-  // Extract hostname from URL (remove https:// or http://)
   const httpHost = url.replace(/^https?:\/\//, '')
   const grpcHost = grpcUrl.replace(/^https?:\/\//, '')
 
@@ -146,12 +125,22 @@ export function loadChatModel(fullySpecifiedName: string): BaseChatModel {
     temperature: 0,
   }
 
+  console.log('🚀 ~ model:', model, 'provider:', provider)
+
   switch (provider.toLowerCase()) {
     case 'groq':
+      const modelMapping = {
+        'llama-3.1-8b-instant': 'llama-3.1-8b-instant',
+        'qwen3-32b': 'qwen/qwen3-32b',
+        'gpt-oss-20b': 'openai/gpt-oss-20b',
+        compound: 'groq/compound',
+      }
+
       return new ChatGroq({
-        // model: 'llama-3.1-8b-instant',
-        // model,
-        model: 'llama-3.1-8b-instant', // TODO: change back to model
+        model:
+          modelMapping[model as keyof typeof modelMapping] ||
+          'llama-3.1-8b-instant',
+        streaming: true,
         ...baseConfig,
       })
 
@@ -165,6 +154,7 @@ export function loadChatModel(fullySpecifiedName: string): BaseChatModel {
     case 'anthropic':
       return new ChatAnthropic({
         model,
+        streaming: true,
         ...baseConfig,
       })
 
@@ -172,12 +162,9 @@ export function loadChatModel(fullySpecifiedName: string): BaseChatModel {
       return new ChatOllama({
         model,
         ...baseConfig,
+        streaming: true,
         baseUrl: process.env.OLLAMA_BASE_URL || 'http://localhost:11434',
       })
-
-    case 'google_genai':
-      // Note: Google GenAI might need special handling for system messages
-      throw new Error('Google GenAI not yet implemented in TypeScript version')
 
     default:
       // Default to OpenAI if no provider specified
