@@ -5,130 +5,44 @@
  * Vietnamese Land Law (Luật Đất đai 2024) using LangGraph.
  *
  * Workflow:
- * 1. Extract metadata from user question (article_id, chapter_id, etc.)
- * 2. Retrieve relevant documents using filters and vector search
- * 3. Grade documents for relevance
- * 4. Transform query if needed (with retry limit)
- * 5. Generate final answer based on retrieved documents
+ * 1. Retrieve relevant documents using hybrid search (BM25 + vector)
+ * 2. Grade documents for relevance
+ * 3. Transform query if needed (with retry limit)
+ * 4. Generate final answer based on retrieved documents
  */
 
 import { StateGraph, START, END } from '@langchain/langgraph'
 import { RunnableConfig } from '@langchain/core/runnables'
 import { AgentState, AgentStateType } from './state.js'
-import {
-  getLandLawAgentConfiguration,
-  GraderSchema,
-  MetadataFilter,
-  MetadataFilterSchema,
-} from './configuration.js'
+import { getLandLawAgentConfiguration } from './configuration.js'
 import { PROMPTS } from './prompts.js'
 import { loadChatModel, formatDocs } from '../utils.js'
-import { makeWeaviateRetriever } from './retrieval'
-import { FilterValue, Operator } from 'weaviate-client'
+import { getWeaviateVectorStore } from './retrieval'
+import { HybridOptions } from 'weaviate-client'
 import { getBaseConfiguration } from '../configuration.js'
 
 /**
- * NODE 1: Extract Metadata
+ * NODE 1: Retrieve Documents
  *
- * Analyzes the user's question to extract structured metadata
- * (article_id, chapter_id, section_id) for targeted retrieval.
- */
-async function extractMetadata(
-  state: AgentStateType,
-  config?: RunnableConfig,
-): Promise<Partial<AgentStateType>> {
-  console.log('---EXTRACT METADATA---')
-  const { question } = state
-  const agentConfig = getLandLawAgentConfiguration(config)
-
-  // Load query model with structured output capability
-  const model = loadChatModel(agentConfig.queryModel)
-  const metadataExtractor = model.withStructuredOutput(MetadataFilterSchema, {
-    name: 'extract_legal_metadata',
-  })
-
-  // Format prompt with question
-  const prompt = await PROMPTS.METADATA_EXTRACTION.formatMessages({ question })
-  const result = await metadataExtractor.invoke(prompt)
-
-  // Clean filters - remove null/undefined values
-  const cleanFilters = Object.fromEntries(
-    Object.entries(result).filter(([_, v]) => v !== null && v !== undefined),
-  ) as MetadataFilter
-
-  return {
-    filters: cleanFilters,
-  }
-}
-
-/**
- * NODE 2: Retrieve Documents
- *
- * Retrieves relevant documents from the vector database.
- * If metadata filters exist (e.g., article_id), they are applied.
- * Otherwise, performs semantic vector search.
+ * Retrieves relevant documents from the vector database using hybrid search.
+ * Combines BM25 keyword search with vector similarity for optimal results.
  */
 async function retrieve(
   state: AgentStateType,
   config?: RunnableConfig,
 ): Promise<Partial<AgentStateType>> {
   console.log('---RETRIEVE---')
-  const { question, filters } = state
+  const { question } = state
+  const baseConfiguration = getBaseConfiguration(config)
+  const vectorStore = await getWeaviateVectorStore(baseConfiguration)
 
-  let filter: FilterValue | undefined
-
-  // Apply metadata filters if available
-  if (filters && Object.keys(filters).length > 0) {
-    console.log('🔍 Applying metadata filters:', filters)
-
-    // Build conditions array using FilterValue format
-    const conditions: FilterValue[] = []
-
-    if (filters.article_id) {
-      conditions.push({
-        target: { property: 'article_id' },
-        operator: 'Equal',
-        value: filters.article_id,
-      })
-    }
-
-    if (filters.chapter_id) {
-      conditions.push({
-        target: { property: 'chapter_id' },
-        operator: 'Equal',
-        value: filters.chapter_id,
-      })
-    }
-
-    if (filters.section_id) {
-      conditions.push({
-        target: { property: 'section_id' },
-        operator: 'Equal',
-        value: filters.section_id,
-      })
-    }
-
-    // Build final filter (handles single or multiple conditions)
-    if (conditions.length > 0) {
-      filter =
-        conditions.length === 1
-          ? conditions[0]
-          : {
-              operator: 'And',
-              filters: conditions,
-              value: null,
-            }
-    }
-  }
-
-  // Create retriever and retrieve documents
-  const retriever = await makeWeaviateRetriever(
-    getBaseConfiguration(config),
-    filter,
-  )
-
-  const documents = await retriever.invoke(question)
-  console.log(`📄 Retrieved ${documents.length} documents`)
+  const documents = await vectorStore.hybridSearch(question, {
+    limit: baseConfiguration.searchKwargs.limit,
+    verbose: baseConfiguration.searchKwargs.verbose,
+    alpha: baseConfiguration.searchKwargs.alpha,
+    returnMetadata: baseConfiguration.searchKwargs.returnMetadata,
+    fusionType: baseConfiguration.searchKwargs.fusionType,
+  } as HybridOptions<undefined, undefined, undefined>)
 
   return {
     documents,
@@ -136,54 +50,72 @@ async function retrieve(
 }
 
 /**
- * NODE 3: Grade Documents
+ * NODE 2: Grade Documents (Score-Based)
  *
- * Evaluates each retrieved document for relevance to the user's question.
- * Only keeps documents that are deemed relevant.
+ * Filters documents based on Weaviate's hybrid search score.
+ * Much faster and more cost-effective than LLM-based grading.
+ * Uses the score from Weaviate's hybrid search (combining BM25 + vector similarity).
  */
 async function gradeDocuments(
   state: AgentStateType,
   config?: RunnableConfig,
 ): Promise<Partial<AgentStateType>> {
-  console.log('---GRADE DOCUMENTS---')
-  const { question, documents } = state
+  console.log('---GRADE DOCUMENTS (SCORE-BASED)---')
+  const { documents } = state
   const agentConfig = getLandLawAgentConfiguration(config)
 
-  // Load model with structured output for grading
-  const model = loadChatModel(agentConfig.queryModel)
-  const grader = model.withStructuredOutput(GraderSchema, {
-    name: 'grade_document',
-  })
+  // Get threshold and minimum documents from config
+  const scoreThreshold = agentConfig.scoreThreshold ?? 0.5
+  const minDocuments = agentConfig.minDocuments ?? 2
 
-  // Grade all documents in parallel using Promise.allSettled
-  const gradingPromises = documents?.map(async (doc) => {
-    const prompt = await PROMPTS.GRADER.formatMessages({
-      question,
-      document: doc.pageContent,
-    })
-    const grade = (await grader.invoke(prompt)) as { is_relevant: boolean }
-    return { doc, grade }
-  })
-
-  const results = await Promise.allSettled(gradingPromises)
-  const validDocs = []
-
-  for (const result of results) {
-    if (result.status === 'fulfilled') {
-      const { doc, grade } = result.value
-      if (grade.is_relevant) {
-        console.log('✅ Document Relevant')
-        validDocs.push(doc)
-      } else {
-        console.log('❌ Document Irrelevant')
-      }
-    } else {
-      console.log('❌ Document Grading Failed:', result.reason)
+  if (!documents || documents.length === 0) {
+    console.log('⚠️ No documents to grade')
+    return {
+      documents: [],
     }
   }
 
+  const validDocs = []
+  const rejectedDocs: Array<{ doc: (typeof documents)[0]; score: number }> = []
+
+  // Grade documents based on their Weaviate hybrid search scores
+  for (const doc of documents) {
+    const score = doc.metadata?.score as number | undefined
+
+    if (score === undefined) {
+      // If score is missing, log warning but keep document as fallback
+      console.log('⚠️ Document missing score - keeping by default')
+      validDocs.push(doc)
+      continue
+    }
+
+    if (score >= scoreThreshold) {
+      console.log(`✅ Document Relevant (score: ${score.toFixed(4)})`)
+      validDocs.push(doc)
+    } else {
+      console.log(`❌ Document Below Threshold (score: ${score.toFixed(4)})`)
+      rejectedDocs.push({ doc, score })
+    }
+  }
+
+  // Fallback: If no docs pass threshold, keep top N by score
+  if (validDocs.length === 0 && documents.length > 0) {
+    console.log(
+      `⚠️ No documents passed threshold (${scoreThreshold}), keeping top ${minDocuments} by score`,
+    )
+    const sorted = [...documents].sort(
+      (a, b) => (b.metadata?.score || 0) - (a.metadata?.score || 0),
+    )
+    const topDocs = sorted.slice(0, minDocuments)
+    topDocs.forEach((doc) => {
+      const score = doc.metadata?.score as number | undefined
+      console.log(`📌 Keeping document (score: ${score?.toFixed(4) ?? 'N/A'})`)
+    })
+    validDocs.push(...topDocs)
+  }
+
   console.log(
-    `📊 ${validDocs.length}/${documents.length} documents are relevant`,
+    `📊 ${validDocs.length}/${documents.length} documents passed (threshold: ${scoreThreshold})`,
   )
 
   return {
@@ -192,7 +124,7 @@ async function gradeDocuments(
 }
 
 /**
- * NODE 4: Transform Query
+ * NODE 3: Transform Query
  *
  * Rewrites the user's question using legal terminology and
  * optimization strategies to improve retrieval in the next iteration.
@@ -225,7 +157,7 @@ async function transformQuery(
 }
 
 /**
- * NODE 5: Generate Answer
+ * NODE 4: Generate Answer
  *
  * Generates the final answer based on the retrieved and graded documents.
  * Uses the response model with higher temperature for natural language.
@@ -266,7 +198,7 @@ async function generate(
 }
 
 /**
- * NODE 6: Generate No Answer
+ * NODE 5: Generate No Answer
  *
  * Generates a helpful "no answer" response when the system
  * cannot find relevant information after all retries.
@@ -337,16 +269,14 @@ function decideToGenerate(
 export function buildLandLawGraph() {
   const workflow = new StateGraph(AgentState)
     // Add all nodes
-    .addNode('extract_metadata', extractMetadata)
     .addNode('retrieve', retrieve)
     .addNode('grade_documents', gradeDocuments)
     .addNode('transform_query', transformQuery)
     .addNode('generate', generate)
     .addNode('no_answer', generateNoAnswer)
 
-    // Define edges
-    .addEdge(START, 'extract_metadata')
-    .addEdge('extract_metadata', 'retrieve')
+    // Define edges - start directly with retrieval
+    .addEdge(START, 'retrieve')
     .addEdge('retrieve', 'grade_documents')
 
     // Conditional edge: decide next step after grading

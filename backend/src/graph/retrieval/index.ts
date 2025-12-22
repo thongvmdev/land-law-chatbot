@@ -8,12 +8,10 @@ import {
 import { getWeaviateClient } from '../../utils.js'
 import { getEmbeddingsModel } from '../../embeddings/index.js'
 import { BaseConfiguration } from '../../configuration.js'
-import type { FilterValue } from 'weaviate-client'
 
-export async function makeWeaviateRetriever(
+export async function getWeaviateVectorStore(
   baseConfiguration: BaseConfiguration,
-  filter?: FilterValue,
-): Promise<VectorStoreRetriever> {
+): Promise<WeaviateStore> {
   const client = await getWeaviateClient()
 
   const embeddings = getEmbeddingsModel(
@@ -36,12 +34,7 @@ export async function makeWeaviateRetriever(
     metadataKeys: METADATA_KEYS,
   })
 
-  return store.asRetriever({
-    k: baseConfiguration.k,
-    filter,
-    verbose: true,
-    searchType: baseConfiguration.searchType,
-  })
+  return store
 }
 
 export async function closeWeaviateClient(

@@ -8,7 +8,7 @@
 // Load environment variables from .env file
 import 'dotenv/config'
 
-import { Filters, FilterValue } from 'weaviate-client'
+import { Filters, FilterValue, HybridOptions } from 'weaviate-client'
 import { getWeaviateClient } from '../../utils'
 import { WeaviateStore } from '@langchain/weaviate'
 import { getEmbeddingsModel } from '../../embeddings'
@@ -89,20 +89,43 @@ async function testRetrieval(): Promise<void> {
             value: null,
           }
 
-    const query = 'Giúp tôi giải thích về quy định chuyển tiếp'
+    const query = 'Quy định về chuyển tiếp đất đai'
+    /* 
+          - Find with id 260
+          - Split into words/keywords > find&rank with BM25 alorithm > results
+          - Vector DB > rank results from BM25 search with embedding vector
+          -> Final result
+    
+    */
+
     const k = 5
 
     console.log(`\n📝 Query: ${query}`)
     console.log(`📊 Retrieving top ${k} results...\n`)
 
-    const similaritySearchResultsretriever = vectorStore.asRetriever({
-      k,
+    // const similaritySearchResultsretriever = vectorStore.asRetriever({
+    //   k,
+    //   // filter,
+    //   verbose: true,
+    //   searchType: 'similarity',
+    // })
+
+    // const documents = await similaritySearchResultsretriever.invoke(query) // or .getRelevantDocuments(query)
+
+    const documents = await vectorStore.hybridSearch(query, {
+      limit: k,
       filter,
       verbose: true,
-      searchType: 'similarity',
-    })
+      alpha: 0.5,
+      returnMetadata: ['score', 'explainScore'],
+      fusionType: 'RelativeScore',
+    } as HybridOptions<undefined, undefined, undefined>)
 
-    const documents = await similaritySearchResultsretriever.invoke(query) // or .getRelevantDocuments(query)
+    for (let object of documents) {
+      console.log(JSON.stringify(object.metadata, null, 2))
+      console.log(object.pageContent)
+    }
+
     console.log('='.repeat(80))
     console.log('📄 RETRIEVED DOCUMENTS:')
     console.log('='.repeat(80))

@@ -21,7 +21,7 @@ export const BaseConfigurationSchema = z.object({
   /**
    * Name of the embedding model to use.
    * Must be a valid embedding model name.
-   * @default "cloudflare/qwen3-embedding-0.6b"
+   * @default "ollama/qwen3-embedding:0.6b"
    */
   embeddingModel: z
     .string()
@@ -39,10 +39,21 @@ export const BaseConfigurationSchema = z.object({
 
   /**
    * Additional keyword arguments to pass to the search function of the retriever.
+   * Final Score = alpha × normalized_vector_score + (1 - alpha) × normalized_bm25_score
+   * The alpha: 0.5 parameter controls the balance:
+   * alpha = 0.0 → Pure keyword (BM25) search
+   * alpha = 0.5 → Equal weight to both (your current setting)
+   * alpha = 1.0 → Pure vector search
    */
   searchKwargs: z
     .record(z.string(), z.any())
-    .default({})
+    .default({
+      limit: 6,
+      verbose: true,
+      alpha: 0.5,
+      returnMetadata: ['score', 'explainScore'],
+      fusionType: 'RelativeScore',
+    })
     .describe('Additional keyword arguments for the retriever search function'),
 
   /**
@@ -60,6 +71,29 @@ export const BaseConfigurationSchema = z.object({
     .enum(['similarity', 'mmr'])
     .default('similarity')
     .describe('The type of search to perform'),
+
+  /**
+   * Minimum score threshold for document relevance
+   * Documents below this score are filtered out
+   * @default 0.5
+   */
+  scoreThreshold: z
+    .number()
+    .min(0)
+    .max(1)
+    .default(0.6)
+    .describe('Minimum hybrid search score for document relevance'),
+
+  /**
+   * Minimum number of documents to keep regardless of score
+   * Prevents zero results when all scores are low
+   * @default 2
+   */
+  minDocuments: z
+    .number()
+    .min(0)
+    .default(2)
+    .describe('Minimum documents to keep regardless of threshold'),
 })
 
 export type BaseConfiguration = z.infer<typeof BaseConfigurationSchema>

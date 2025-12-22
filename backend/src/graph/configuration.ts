@@ -10,33 +10,6 @@ import { z } from 'zod'
 import { BaseConfigurationSchema } from '../configuration'
 
 /**
- * Schema for metadata extraction
- */
-export const MetadataFilterSchema = z.object({
-  article_id: z
-    .string()
-    .optional()
-    .nullable()
-    .describe(
-      "Số hiệu điều luật. VD: Nếu user hỏi 'Điều 260', trích xuất '260'.",
-    ),
-  chapter_id: z
-    .string()
-    .optional()
-    .nullable()
-    .describe(
-      "Số chương (số La Mã). VD: Nếu user hỏi 'Chương V', trích xuất 'V'.",
-    ),
-  section_id: z
-    .string()
-    .optional()
-    .nullable()
-    .describe("Số mục. VD: Nếu user hỏi 'Mục 1', trích xuất '1'."),
-})
-
-export type MetadataFilter = z.infer<typeof MetadataFilterSchema>
-
-/**
  * Schema for document grading
  */
 export const GraderSchema = z.object({

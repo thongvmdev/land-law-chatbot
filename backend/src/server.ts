@@ -9,7 +9,7 @@ import express, { Request, Response } from 'express'
 import cors from 'cors'
 import { config as loadEnv } from 'dotenv'
 import { HumanMessage } from '@langchain/core/messages'
-import { graph } from './example/retrieval_graph/graph.js'
+import { landLawGraph } from './graph/index.js'
 
 // Load environment variables
 loadEnv()
@@ -71,8 +71,8 @@ app.post('/runs', async (req: Request, res: Response) => {
     }
 
     // Invoke the graph
-    const result = await graph.invoke(
-      { messages: messageObjects },
+    const result = await landLawGraph.invoke(
+      { question: messageObjects[messageObjects.length - 1].content },
       runnableConfig,
     )
 
@@ -132,8 +132,8 @@ app.post('/runs/stream', async (req: Request, res: Response) => {
     }
 
     // Stream the graph execution
-    const stream = await graph.stream(
-      { messages: messageObjects },
+    const stream = await landLawGraph.stream(
+      { question: messageObjects[messageObjects.length - 1].content },
       runnableConfig,
     )
 
@@ -220,8 +220,8 @@ app.post('/threads/:thread_id/runs', async (req: Request, res: Response) => {
     }
 
     // Invoke the graph
-    const result = await graph.invoke(
-      { messages: messageObjects },
+    const result = await landLawGraph.invoke(
+      { question: messageObjects[messageObjects.length - 1].content },
       runnableConfig,
     )
 

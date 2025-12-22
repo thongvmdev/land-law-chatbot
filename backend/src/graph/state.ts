@@ -7,7 +7,6 @@
 import { Annotation, messagesStateReducer } from '@langchain/langgraph'
 import { Document } from '@langchain/core/documents'
 import { BaseMessage } from '@langchain/core/messages'
-import { MetadataFilter } from './configuration'
 import { reduceDocs } from '../utils'
 import isEmpty from 'lodash/isEmpty'
 
@@ -18,7 +17,6 @@ import isEmpty from 'lodash/isEmpty'
  * - question: The user's original question
  * - documents: Retrieved legal document chunks
  * - generation: The final generated answer
- * - filters: Metadata filters extracted from the question
  * - loop_step: Counter to prevent infinite loops
  * - messages: Chat history for conversational context
  */
@@ -47,16 +45,6 @@ export const AgentState = Annotation.Root({
    * The final generated answer
    */
   answer: Annotation<string>,
-
-  /**
-   * Metadata filters for targeted retrieval
-   */
-  filters: Annotation<MetadataFilter>({
-    reducer: (existing, newFilters) => {
-      return { ...existing, ...newFilters }
-    },
-    default: () => ({}),
-  }),
 
   /**
    * Loop counter to prevent infinite retries

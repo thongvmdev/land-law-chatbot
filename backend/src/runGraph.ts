@@ -21,10 +21,11 @@ async function testGraph(): Promise<void> {
       'Quy định chuyển tiếp tại Điều 260 có nội dung gì về đất thuê?',
       'Quyền sử dụng đất của hộ gia đình được quy định như thế nào?',
       'Chương V của Luật Đất đai quy định về điều gì?',
+      'Nếu tôi nhận thấy Sổ đỏ cũ ghi sai vị trí (tọa độ bản đồ) của thửa đất, cơ quan có thẩm quyền sẽ xử lý thế nào?',
     ]
 
     // Use the first question for testing
-    const question = testQuestions[0]
+    const question = testQuestions[3]
     // 'Nếu tôi nhận thấy Sổ đỏ cũ ghi sai vị trí (tọa độ bản đồ) của thửa đất, cơ quan có thẩm quyền sẽ xử lý thế nào?'
     console.log(`📝 Question: ${question}\n`)
 
@@ -42,12 +43,6 @@ async function testGraph(): Promise<void> {
 
     console.log(`\n📚 Documents retrieved: ${result.documents?.length || 0}`)
     console.log(`🔄 Loop iterations: ${result.loop_step || 0}`)
-
-    // Print extracted filters if available
-    if (result.filters && Object.keys(result.filters).length > 0) {
-      console.log('\n🔍 Extracted Metadata Filters:')
-      console.log(JSON.stringify(result.filters, null, 2))
-    }
 
     // Print a sample of documents if available
     if (result.documents && result.documents.length > 0) {

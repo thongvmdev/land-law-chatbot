@@ -8,31 +8,6 @@
 import { ChatPromptTemplate } from '@langchain/core/prompts'
 
 /**
- * Prompt for extracting metadata from user questions
- *
- * Extracts structured information like article_id, chapter_id, section_id
- */
-export const METADATA_EXTRACTION_PROMPT = ChatPromptTemplate.fromMessages([
-  [
-    'system',
-    `Bạn là trợ lý AI chuyên về Luật Đất đai Việt Nam.
-Nhiệm vụ của bạn là phân tích câu hỏi và trích xuất các thông tin định danh (Metadata) để tìm kiếm chính xác trong cơ sở dữ liệu.
-
-Hãy xác định:
-- article_id: Số hiệu điều luật (ví dụ: "Điều 260" -> "260", "điều 15" -> "15")
-- chapter_id: Số chương bằng chữ số La Mã (ví dụ: "Chương V" -> "V", "Chương III" -> "III")
-- section_id: Số mục (ví dụ: "Mục 1" -> "1", "Mục 3" -> "3")
-- law_id: Mã văn bản pháp luật nếu được đề cập (ví dụ: "133/VBHN-VPQH")
-
-CHÚ Ý:
-- Chỉ trích xuất thông tin được đề cập rõ ràng trong câu hỏi
-- Không phát minh hoặc suy đoán thông tin không có
-- Trả về null cho các trường không tìm thấy`,
-  ],
-  ['human', 'Câu hỏi: {question}'],
-])
-
-/**
  * Prompt for grading document relevance
  *
  * Determines if a retrieved document is relevant to the user's question
@@ -185,7 +160,6 @@ export async function formatPrompt(
  * Export all prompts as a collection for easy access
  */
 export const PROMPTS = {
-  METADATA_EXTRACTION: METADATA_EXTRACTION_PROMPT,
   GRADER: GRADER_PROMPT,
   QUERY_TRANSFORM: QUERY_TRANSFORM_PROMPT,
   GENERATION: GENERATION_PROMPT,
