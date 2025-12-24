@@ -8,6 +8,7 @@
 import 'dotenv/config'
 
 import { landLawGraph } from './graph/index.js'
+import { HumanMessage } from '@langchain/core/messages'
 
 /**
  * Test the graph with a sample query about Vietnamese Land Law
@@ -22,16 +23,16 @@ async function testGraph(): Promise<void> {
       'Quyền sử dụng đất của hộ gia đình được quy định như thế nào?',
       'Chương V của Luật Đất đai quy định về điều gì?',
       'Nếu tôi nhận thấy Sổ đỏ cũ ghi sai vị trí (tọa độ bản đồ) của thửa đất, cơ quan có thẩm quyền sẽ xử lý thế nào?',
+      'So sánh quy định về chuyển nhượng đất ở và đất nông nghiệp',
+      'Điều 152 quy định gì?',
     ]
 
     // Use the first question for testing
-    const question = testQuestions[3]
-    // 'Nếu tôi nhận thấy Sổ đỏ cũ ghi sai vị trí (tọa độ bản đồ) của thửa đất, cơ quan có thẩm quyền sẽ xử lý thế nào?'
+    const question = 'Điều 152 quy định gì?'
     console.log(`📝 Question: ${question}\n`)
 
     const result = await landLawGraph.invoke({
-      question,
-      loop_step: 0,
+      messages: [new HumanMessage(question)],
     })
 
     console.log('\n✅ Graph execution completed!\n')

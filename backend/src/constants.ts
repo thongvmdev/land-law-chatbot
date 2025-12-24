@@ -23,7 +23,7 @@ export const OLLAMA_BASE_URL =
 export const OLLAMA_BASE_EMBEDDING_DOCS_URL =
   process.env.OLLAMA_BASE_EMBEDDING_DOCS_URL || 'http://localhost:11434'
 
-type MetadataKey = ParsedChunkMetadata & {
+export type MetadataKey = ParsedChunkMetadata & {
   title: string
   source: string
 }
@@ -40,3 +40,14 @@ export const METADATA_KEYS: (keyof MetadataKey)[] = [
   'topic',
   'chunk_id',
 ]
+
+// Graph node names
+export const GRAPH_NODES = {
+  ROUTE_QUERY: 'route_query',
+  DECOMPOSE_QUERY: 'decompose_query',
+  RETRIEVE_DOCUMENTS: 'retrieve_documents',
+  GRADE_DOCUMENTS: 'grade_documents',
+  TRANSFORM_QUERY: 'transform_query',
+  GENERATE: 'generate',
+  NO_ANSWER: 'no_answer',
+} as const

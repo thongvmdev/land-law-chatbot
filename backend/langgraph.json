@@ -1,8 +1,10 @@
 {
   "$schema": "https://langgra.ph/schema.json",
-  "dependencies": ["."],
+  "dependencies": [
+    "."
+  ],
   "graphs": {
-    "chat": "./src/retrieval_graph/graph.ts:graph"
+    "chat": "./src/graph/index.ts:landLawGraph"
   },
   "env": ".env",
   "image_distro": "wolfi",
@@ -14,4 +16,3 @@
     }
   }
 }
-

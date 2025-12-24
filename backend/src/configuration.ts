@@ -71,29 +71,6 @@ export const BaseConfigurationSchema = z.object({
     .enum(['similarity', 'mmr'])
     .default('similarity')
     .describe('The type of search to perform'),
-
-  /**
-   * Minimum score threshold for document relevance
-   * Documents below this score are filtered out
-   * @default 0.5
-   */
-  scoreThreshold: z
-    .number()
-    .min(0)
-    .max(1)
-    .default(0.6)
-    .describe('Minimum hybrid search score for document relevance'),
-
-  /**
-   * Minimum number of documents to keep regardless of score
-   * Prevents zero results when all scores are low
-   * @default 2
-   */
-  minDocuments: z
-    .number()
-    .min(0)
-    .default(2)
-    .describe('Minimum documents to keep regardless of threshold'),
 })
 
 export type BaseConfiguration = z.infer<typeof BaseConfigurationSchema>

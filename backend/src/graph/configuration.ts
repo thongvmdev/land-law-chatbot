@@ -23,6 +23,42 @@ export const GraderSchema = z.object({
 export type Grader = z.infer<typeof GraderSchema>
 
 /**
+ * Schema for query routing
+ */
+export const RouteSchema = z.object({
+  is_complex: z
+    .boolean()
+    .describe(
+      'Is this a complex question requiring multiple sub-queries? ' +
+        'Complex questions typically: ' +
+        '1) Ask about multiple articles/chapters, ' +
+        '2) Compare different concepts, ' +
+        '3) Require multi-step reasoning, ' +
+        '4) Combine multiple legal aspects',
+    ),
+  reasoning: z
+    .string()
+    .describe('Brief explanation of why the question is simple or complex'),
+})
+
+export type Route = z.infer<typeof RouteSchema>
+
+/**
+ * Schema for query decomposition
+ */
+export const DecompositionSchema = z.object({
+  sub_queries: z
+    .array(z.string())
+    .min(2)
+    .max(4)
+    .describe(
+      'List of 2-4 focused sub-queries that together cover the original question',
+    ),
+})
+
+export type Decomposition = z.infer<typeof DecompositionSchema>
+
+/**
  * LandLawAgentConfiguration extends BaseConfiguration with agent-specific settings
  */
 export const LandLawAgentConfigurationSchema = BaseConfigurationSchema.extend({
@@ -33,7 +69,7 @@ export const LandLawAgentConfigurationSchema = BaseConfigurationSchema.extend({
    */
   queryModel: z
     .string()
-    .default('groq/qwen3-32b')
+    .default('groq/qwen3-32b') // qwen3:8b
     .describe(
       'The language model used for query processing and metadata extraction',
     ),
@@ -45,7 +81,7 @@ export const LandLawAgentConfigurationSchema = BaseConfigurationSchema.extend({
    */
   responseModel: z
     .string()
-    .default('groq/qwen3-32b')
+    .default('groq/qwen3-32b') // qwen3:8b
     .describe('The language model used for generating responses'),
 
   /**
@@ -80,6 +116,52 @@ export const LandLawAgentConfigurationSchema = BaseConfigurationSchema.extend({
     .max(2)
     .default(0.3)
     .describe('Temperature for response generation (higher = more creative)'),
+
+  /**
+   * Minimum score threshold for document relevance
+   * Documents below this score are filtered out
+   * @default 0.6
+   */
+  scoreThreshold: z
+    .number()
+    .min(0)
+    .max(1)
+    .default(0.6)
+    .describe('Minimum hybrid search score for document relevance'),
+
+  /**
+   * Minimum number of documents to keep regardless of score
+   * Prevents zero results when all scores are low
+   * @default 2
+   */
+  minDocuments: z
+    .number()
+    .min(0)
+    .default(2)
+    .describe('Minimum documents to keep regardless of threshold'),
+
+  /**
+   * Maximum number of sub-queries for decomposition
+   * @default 3
+   */
+  maxSubQueries: z
+    .number()
+    .min(2)
+    .max(5)
+    .default(3)
+    .describe('Maximum sub-queries for complex questions'),
+
+  /**
+   * Documents to retrieve per sub-query
+   * Should be lower than single query limit for efficiency
+   * @default 4
+   */
+  docsPerSubQuery: z
+    .number()
+    .min(2)
+    .max(10)
+    .default(4)
+    .describe('Documents to retrieve per sub-query in parallel retrieval'),
 })
 
 export type LandLawAgentConfiguration = z.infer<

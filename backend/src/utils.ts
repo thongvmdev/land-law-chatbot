@@ -1,11 +1,45 @@
 import weaviate, { WeaviateClient } from 'weaviate-client'
 import { Document } from '@langchain/core/documents'
 import { BaseChatModel } from '@langchain/core/language_models/chat_models'
+import { BaseMessage } from '@langchain/core/messages'
 import { ChatAnthropic } from '@langchain/anthropic'
 import { ChatOpenAI } from '@langchain/openai'
 import { ChatGroq } from '@langchain/groq'
 import { ChatOllama } from '@langchain/ollama'
-import { v4 as uuidv4 } from 'uuid'
+import { MetadataKey } from './constants'
+import unionBy from 'lodash/unionBy'
+import isEmpty from 'lodash/isEmpty'
+
+/**
+ * Extract the latest user question from messages array.
+ *
+ * Searches backwards through the messages array to find the most recent
+ * human message and returns its content as the question.
+ *
+ * @param messages - Array of BaseMessage objects
+ * @returns The content of the last human message
+ * @throws Error if no human message is found
+ *
+ * @example
+ * ```typescript
+ * const messages = [
+ *   new HumanMessage("What is Article 152?"),
+ *   new AIMessage("Article 152 is about..."),
+ *   new HumanMessage("Tell me more")
+ * ];
+ * const question = extractLatestQuestion(messages);
+ * // Returns: "Tell me more"
+ * ```
+ */
+export function extractLatestQuestion(messages: BaseMessage[]): string {
+  // Find the last human message
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].type === 'human') {
+      return messages[i].content as string
+    }
+  }
+  throw new Error('No user question found in messages')
+}
 
 export async function getWeaviateClient(
   weaviateUrl?: string,
@@ -51,7 +85,14 @@ export async function getWeaviateClient(
  */
 function formatDoc(doc: Document): string {
   const metadata = doc.metadata || {}
+  const pickFields: (keyof MetadataKey)[] = [
+    'title',
+    'chapter_title',
+    'section_title',
+    'chunk_footnotes',
+  ]
   const metaStr = Object.entries(metadata)
+    .filter(([k]) => pickFields.includes(k as keyof MetadataKey))
     .map(([k, v]) => ` ${k}="${v}"`)
     .join('')
 
@@ -163,7 +204,8 @@ export function loadChatModel(fullySpecifiedName: string): BaseChatModel {
         model,
         ...baseConfig,
         streaming: true,
-        baseUrl: process.env.OLLAMA_BASE_URL || 'http://localhost:11434',
+        // baseUrl: process.env.OLLAMA_BASE_URL || 'http://localhost:11434',
+        baseUrl: 'http://localhost:11434',
       })
 
     default:
@@ -176,134 +218,77 @@ export function loadChatModel(fullySpecifiedName: string): BaseChatModel {
   }
 }
 
-/**
- * Reduce and process documents based on the input type.
- *
- * This function handles various input types and converts them into a sequence of Document objects.
- * It also combines existing documents with the new ones based on the document ID.
- *
- * @param existing - The existing docs in the state, if any
- * @param newDocs - The new input to process. Can be a sequence of Documents, objects, strings, or "delete"
- * @returns Combined list of documents
- */
-/**
- * Reduce and process documents based on the input type.
- *
- * This function handles various input types and converts them into a sequence of Document objects.
- * It uses dual deduplication: UUID-based (primary) and content-based (secondary).
- * The content-based check handles retrieved documents that have different UUIDs but identical content.
- *
- * @param existing - The existing docs in the state, if any
- * @param newDocs - The new input to process. Can be a sequence of Documents, objects, strings, or "delete"
- * @returns Combined list of documents
- */
 export function reduceDocs(
-  existing: Document[] | undefined,
-  newDocs: Document[] | Record<string, any>[] | string[] | string | 'delete',
+  existing: Document[] = [],
+  newDocs: Document[] = [],
 ): Document[] {
-  if (newDocs === 'delete') {
+  // case: no valids docs
+  if (isEmpty(newDocs)) {
     return []
   }
 
-  const existingList = existing || []
+  // Check if this is a filtering operation:
+  // All new doc IDs exist in existing AND fewer docs returned
+  const newIds = new Set(newDocs.map((d) => d.id).filter(Boolean))
+  const existingIds = new Set(existing.map((d) => d.id).filter(Boolean))
 
-  if (typeof newDocs === 'string') {
-    return [
-      ...existingList,
-      new Document({
-        pageContent: newDocs,
-        metadata: { uuid: uuidv4() },
-      }),
-    ]
+  // If all new doc IDs are in existing, this is filtering → replace
+  const allNewInExisting =
+    newIds.size > 0 && [...newIds].every((id) => existingIds.has(id))
+
+  if (allNewInExisting) {
+    return newDocs // Replace with filtered subset
   }
 
-  if (!Array.isArray(newDocs)) {
-    return existingList
+  // Otherwise, merge with deduplication (parallel retrieval case)
+  const combinedByUuid = unionBy(existing, newDocs, (doc) => doc.id)
+
+  return combinedByUuid
+}
+
+export function formatConversationHistory(
+  messages: BaseMessage[],
+  keepRecentTurns: number = 3,
+): string {
+  if (!messages || messages.length === 0) {
+    return ''
   }
 
-  const newList: Document[] = []
-  // Primary deduplication: Track UUIDs (matches Python's behavior)
-  const existingIds = new Set(
-    existingList.map((doc) => doc.metadata?.uuid).filter(Boolean),
-  )
+  // Split into old and recent
+  const recentCount = keepRecentTurns * 2 // Q&A pairs
+  const oldMessages = messages.slice(0, -recentCount)
+  const recentMessages = messages.slice(-recentCount)
 
-  // Secondary deduplication: Track content+source signatures
-  // This catches retrieved documents with different UUIDs but identical content
-  const existingContentKeys = new Set(
-    existingList.map((doc) => {
-      const source = doc.metadata?.source || ''
-      const content = doc.pageContent.substring(0, 500) // Use first 500 chars as signature
-      return `${source}:::${content}`
-    }),
-  )
+  let formatted = ''
 
-  for (const item of newDocs) {
-    if (typeof item === 'string') {
-      const itemId = uuidv4()
-      newList.push(
-        new Document({
-          pageContent: item,
-          metadata: { uuid: itemId },
-        }),
-      )
-      existingIds.add(itemId)
-    } else if (item instanceof Document) {
-      // Use existing id from Document (from vector DB) if available, otherwise check metadata.uuid, fallback to generating new UUID
-      let itemId = item.id || item.metadata?.uuid
-      if (!itemId) {
-        // Generate new UUID only if neither id nor metadata.uuid exists
-        itemId = uuidv4()
-      }
-
-      // Primary check: UUID-based deduplication
-      if (existingIds.has(itemId)) {
-        continue
-      }
-
-      // Secondary check: content-based deduplication (for retrieved docs with different UUIDs)
-      const source = item.metadata?.source || ''
-      const contentKey = `${source}:::${item.pageContent.substring(0, 500)}`
-      if (existingContentKeys.has(contentKey)) {
-        continue
-      }
-
-      // Add the document if it's truly unique
-      // Ensure metadata.uuid is set for deduplication consistency, and preserve the id field
-      const newDoc =
-        itemId === item.metadata?.uuid && itemId === item.id
-          ? item
-          : new Document({
-              pageContent: item.pageContent,
-              metadata: { ...item.metadata, uuid: itemId },
-              id: itemId, // Preserve the id field from vector DB
-            })
-
-      newList.push(newDoc)
-      existingIds.add(itemId)
-      existingContentKeys.add(contentKey)
-    } else if (typeof item === 'object' && item !== null) {
-      // Plain object with pageContent
-      const metadata = item.metadata || {}
-      const pageContent = item.pageContent || ''
-      // Use existing id from object if available (from vector DB), otherwise check metadata.uuid, fallback to generating new UUID
-      let itemId = (item as any).id || metadata.uuid
-
-      if (!itemId) {
-        itemId = uuidv4()
-      }
-
-      if (!existingIds.has(itemId)) {
-        newList.push(
-          new Document({
-            pageContent,
-            metadata: { ...metadata, uuid: itemId },
-            id: itemId, // Preserve the id field from vector DB
-          }),
-        )
-        existingIds.add(itemId)
-      }
-    }
+  // Summarize old messages
+  if (oldMessages.length > 0) {
+    const topics = oldMessages
+      .filter((m) => m.type === 'human')
+      .map((m) => {
+        const content = typeof m.content === 'string' ? m.content : ''
+        // Extract article numbers if mentioned
+        const match = content.match(/Điều\s+\d+/)
+        return match ? match[0] : 'chủ đề khác'
+      })
+    formatted += `[Lịch sử cũ - Đã thảo luận: ${[...new Set(topics)].join(
+      ', ',
+    )}]\n\n`
   }
 
-  return [...existingList, ...newList]
+  // Full recent messages
+  if (recentMessages.length > 0) {
+    formatted += recentMessages
+      .map((msg) => {
+        const role = msg.type === 'human' ? '👤 Người dùng' : '🤖 Trợ lý'
+        const content =
+          typeof msg.content === 'string'
+            ? msg.content
+            : JSON.stringify(msg.content)
+        return `${role}: ${content}`
+      })
+      .join('\n\n')
+  }
+
+  return formatted
 }

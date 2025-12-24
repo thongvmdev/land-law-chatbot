@@ -5,44 +5,152 @@
  * Vietnamese Land Law (Luật Đất đai 2024) using LangGraph.
  *
  * Workflow:
- * 1. Retrieve relevant documents using hybrid search (BM25 + vector)
- * 2. Grade documents for relevance
- * 3. Transform query if needed (with retry limit)
- * 4. Generate final answer based on retrieved documents
+ * 1. Route query (simple vs complex)
+ * 2. Decompose complex queries into sub-queries
+ * 3. Retrieve documents in parallel for multiple queries
+ * 4. Grade documents based on hybrid search scores
+ * 5. Transform query if needed (with retry limit)
+ * 6. Generate final answer based on retrieved documents
  */
 
-import { StateGraph, START, END } from '@langchain/langgraph'
+import { StateGraph, START, END, Send } from '@langchain/langgraph'
 import { RunnableConfig } from '@langchain/core/runnables'
-import { AgentState, AgentStateType } from './state.js'
-import { getLandLawAgentConfiguration } from './configuration.js'
+import {
+  AgentState,
+  AgentStateType,
+  InputStateAnnotation,
+  QueryInput,
+} from './state.js'
+import {
+  getLandLawAgentConfiguration,
+  RouteSchema,
+  DecompositionSchema,
+  LandLawAgentConfigurationSchema,
+} from './configuration.js'
 import { PROMPTS } from './prompts.js'
-import { loadChatModel, formatDocs } from '../utils.js'
+import {
+  loadChatModel,
+  formatDocs,
+  extractLatestQuestion,
+  formatConversationHistory,
+} from '../utils.js'
 import { getWeaviateVectorStore } from './retrieval'
 import { HybridOptions } from 'weaviate-client'
 import { getBaseConfiguration } from '../configuration.js'
+import { GRAPH_NODES } from '../constants.js'
 
 /**
- * NODE 1: Retrieve Documents
+ * NODE 1: Route Query
  *
- * Retrieves relevant documents from the vector database using hybrid search.
- * Combines BM25 keyword search with vector similarity for optimal results.
+ * Classifies the question as simple or complex.
+ * Complex questions will be decomposed into multiple focused queries.
  */
-async function retrieve(
+async function routeQuery(
   state: AgentStateType,
   config?: RunnableConfig,
 ): Promise<Partial<AgentStateType>> {
-  console.log('---RETRIEVE---')
-  const { question } = state
+  console.log('---ROUTE QUERY---')
+  const { messages } = state
+  const agentConfig = getLandLawAgentConfiguration(config)
+
+  const model = loadChatModel(agentConfig.queryModel)
+  const router = model.withStructuredOutput(RouteSchema, {
+    name: 'route_query_complexity',
+  })
+
+  // Extract question from messages
+  const question = extractLatestQuestion(messages)
+  const systemPrompt = await PROMPTS.ROUTE_QUERY.formatMessages({ question })
+  const result = await router.invoke(systemPrompt, config)
+
+  console.log(
+    `🔍 Query Classification: ${result.is_complex ? 'COMPLEX' : 'SIMPLE'}`,
+  )
+  console.log(`💭 Reasoning: ${result.reasoning}`)
+
+  return {
+    isComplex: result.is_complex,
+    question,
+  }
+}
+
+/**
+ * NODE 2: Decompose Query
+ *
+ * Breaks a complex question into multiple focused sub-queries
+ * for more accurate parallel retrieval.
+ */
+async function decomposeQuery(
+  state: AgentStateType,
+  config?: RunnableConfig,
+): Promise<Partial<AgentStateType>> {
+  console.log('---DECOMPOSE QUERY---')
+  const { messages } = state
+  const agentConfig = getLandLawAgentConfiguration(config)
+
+  // Extract question from messages (use cached state.question if available)
+  const question = state.question || extractLatestQuestion(messages)
+
+  const model = loadChatModel(agentConfig.queryModel)
+  const decomposer = model.withStructuredOutput(DecompositionSchema, {
+    name: 'decompose_query',
+  })
+
+  const systemPrompt = await PROMPTS.DECOMPOSE_QUERY.formatMessages({
+    question,
+  })
+  const result = await decomposer.invoke(systemPrompt, config)
+
+  // Limit to maxSubQueries
+  const subQueries = result.sub_queries.slice(0, agentConfig.maxSubQueries)
+
+  console.log(`📝 Decomposed into ${subQueries.length} sub-queries:`)
+  subQueries.forEach((q, i) => {
+    console.log(`  ${i + 1}. ${q}`)
+  })
+
+  return {
+    queries: subQueries,
+  }
+}
+
+/**
+ * NODE 3: Retrieve Documents (Single Query)
+ *
+ * Retrieves documents for a single query.
+ * This node is executed in parallel when multiple queries exist.
+ * Returns documents that are merged via AgentState.documents reducer.
+ */
+async function retrieveDocuments(
+  state: QueryInput,
+  config?: RunnableConfig,
+): Promise<Partial<AgentStateType>> {
+  console.log(`---RETRIEVE (Query ${state.queryIndex + 1})---`)
+  const { query, queryIndex } = state
   const baseConfiguration = getBaseConfiguration(config)
+  const agentConfig = getLandLawAgentConfiguration(config)
   const vectorStore = await getWeaviateVectorStore(baseConfiguration)
 
-  const documents = await vectorStore.hybridSearch(question, {
-    limit: baseConfiguration.searchKwargs.limit,
+  // Use docsPerSubQuery if this is part of parallel retrieval
+  const limit =
+    agentConfig.docsPerSubQuery || baseConfiguration.searchKwargs.limit
+
+  const documents = await vectorStore.hybridSearch(query, {
+    limit,
     verbose: baseConfiguration.searchKwargs.verbose,
     alpha: baseConfiguration.searchKwargs.alpha,
     returnMetadata: baseConfiguration.searchKwargs.returnMetadata,
     fusionType: baseConfiguration.searchKwargs.fusionType,
   } as HybridOptions<undefined, undefined, undefined>)
+
+  // Add queryIndex to metadata for tracking
+  documents.forEach((doc) => {
+    doc.metadata = { ...doc.metadata, queryIndex }
+  })
+
+  console.log(
+    `  ✓ Retrieved ${documents.length} documents for query ${queryIndex + 1}`,
+  )
 
   return {
     documents,
@@ -50,23 +158,22 @@ async function retrieve(
 }
 
 /**
- * NODE 2: Grade Documents (Score-Based)
+ * NODE 4: Grade and Rank Documents
  *
- * Filters documents based on Weaviate's hybrid search score.
+ * Filters and ranks documents based on Weaviate's hybrid search score.
  * Much faster and more cost-effective than LLM-based grading.
- * Uses the score from Weaviate's hybrid search (combining BM25 + vector similarity).
+ * Handles documents from parallel retrievals by merging and ranking.
  */
 async function gradeDocuments(
   state: AgentStateType,
   config?: RunnableConfig,
 ): Promise<Partial<AgentStateType>> {
-  console.log('---GRADE DOCUMENTS (SCORE-BASED)---')
+  console.log('---GRADE & RANK DOCUMENTS (SCORE-BASED)---')
   const { documents } = state
   const agentConfig = getLandLawAgentConfiguration(config)
 
   // Get threshold and minimum documents from config
-  const scoreThreshold = agentConfig.scoreThreshold ?? 0.5
-  const minDocuments = agentConfig.minDocuments ?? 2
+  const scoreThreshold = agentConfig.scoreThreshold ?? 0.7
 
   if (!documents || documents.length === 0) {
     console.log('⚠️ No documents to grade')
@@ -75,8 +182,9 @@ async function gradeDocuments(
     }
   }
 
+  console.log(`📚 Total documents from retrieval: ${documents.length}`)
+
   const validDocs = []
-  const rejectedDocs: Array<{ doc: (typeof documents)[0]; score: number }> = []
 
   // Grade documents based on their Weaviate hybrid search scores
   for (const doc of documents) {
@@ -94,25 +202,11 @@ async function gradeDocuments(
       validDocs.push(doc)
     } else {
       console.log(`❌ Document Below Threshold (score: ${score.toFixed(4)})`)
-      rejectedDocs.push({ doc, score })
     }
   }
 
-  // Fallback: If no docs pass threshold, keep top N by score
-  if (validDocs.length === 0 && documents.length > 0) {
-    console.log(
-      `⚠️ No documents passed threshold (${scoreThreshold}), keeping top ${minDocuments} by score`,
-    )
-    const sorted = [...documents].sort(
-      (a, b) => (b.metadata?.score || 0) - (a.metadata?.score || 0),
-    )
-    const topDocs = sorted.slice(0, minDocuments)
-    topDocs.forEach((doc) => {
-      const score = doc.metadata?.score as number | undefined
-      console.log(`📌 Keeping document (score: ${score?.toFixed(4) ?? 'N/A'})`)
-    })
-    validDocs.push(...topDocs)
-  }
+  // Sort valid documents by score (highest first) for better context ordering
+  validDocs.sort((a, b) => (b.metadata?.score || 0) - (a.metadata?.score || 0))
 
   console.log(
     `📊 ${validDocs.length}/${documents.length} documents passed (threshold: ${scoreThreshold})`,
@@ -124,7 +218,7 @@ async function gradeDocuments(
 }
 
 /**
- * NODE 3: Transform Query
+ * NODE 5: Transform Query
  *
  * Rewrites the user's question using legal terminology and
  * optimization strategies to improve retrieval in the next iteration.
@@ -134,16 +228,20 @@ async function transformQuery(
   config?: RunnableConfig,
 ): Promise<Partial<AgentStateType>> {
   console.log('---TRANSFORM QUERY---')
-  const { question, loop_step } = state
+  const { messages, loop_step } = state
   const agentConfig = getLandLawAgentConfiguration(config)
+
+  // Extract question from messages (use cached state.question if available)
+  const question = state.question || extractLatestQuestion(messages)
 
   // Load model for query transformation
   const model = loadChatModel(agentConfig.queryModel)
 
   // Format prompt for transformation
-  const messages = await PROMPTS.QUERY_TRANSFORM.formatMessages({ question })
-
-  const response = await model.invoke(messages)
+  const systemPrompt = await PROMPTS.QUERY_TRANSFORM.formatMessages({
+    question,
+  })
+  const response = await model.invoke(systemPrompt, config)
   const betterQuestion =
     typeof response.content === 'string' ? response.content : question
 
@@ -152,12 +250,15 @@ async function transformQuery(
 
   return {
     question: betterQuestion,
-    loop_step: loop_step, // Increment loop step
+    loop_step: loop_step + 1,
+    // Reset complexity flag to re-evaluate after transformation
+    isComplex: false,
+    queries: [],
   }
 }
 
 /**
- * NODE 4: Generate Answer
+ * NODE 6: Generate Answer
  *
  * Generates the final answer based on the retrieved and graded documents.
  * Uses the response model with higher temperature for natural language.
@@ -167,8 +268,11 @@ async function generate(
   config?: RunnableConfig,
 ): Promise<Partial<AgentStateType>> {
   console.log('---GENERATE---')
-  const { question, documents } = state
+  const { messages: stateMessages, documents } = state
   const agentConfig = getLandLawAgentConfiguration(config)
+
+  // Extract question from messages (use cached state.question if available)
+  const question = state.question || extractLatestQuestion(stateMessages)
 
   // Format documents as context
   const context = formatDocs(documents)
@@ -176,29 +280,37 @@ async function generate(
   // Load response model
   const model = loadChatModel(agentConfig.responseModel)
 
+  // TODO: Research more detail
+  const conversationHistory = formatConversationHistory(
+    stateMessages.slice(0, -1), // Exclude current question
+  )
+
   // Format prompt for generation
   const messages = await PROMPTS.GENERATION.formatMessages({
     context,
     question,
+    history:
+      conversationHistory ||
+      'Chưa có lịch sử hội thoại (đây là câu hỏi đầu tiên).',
   })
 
-  const response = await model.invoke(messages)
+  const response = await model.invoke(messages, config)
 
   const generation =
     typeof response.content === 'string'
       ? response.content
-      : 'Xin lỗi, tôi không thể tạo câu trả lời lúc này.'
+      : JSON.stringify(response.content)
 
   console.log('✅ Answer Generated')
 
   return {
-    answer: generation,
     messages: [response],
+    answer: generation || 'No answer generated',
   }
 }
 
 /**
- * NODE 5: Generate No Answer
+ * NODE 7: Generate No Answer
  *
  * Generates a helpful "no answer" response when the system
  * cannot find relevant information after all retries.
@@ -208,7 +320,10 @@ async function generateNoAnswer(
   _config?: RunnableConfig,
 ): Promise<Partial<AgentStateType>> {
   console.log('---GENERATE NO ANSWER---')
-  const { question } = state
+  const { messages } = state
+
+  // Extract question from messages (use cached state.question if available)
+  const question = state.question || extractLatestQuestion(messages)
 
   // Format no answer prompt
   const prompt = await PROMPTS.NO_ANSWER.format({ question })
@@ -220,6 +335,56 @@ async function generateNoAnswer(
   return {
     answer: generation,
   }
+}
+
+/**
+ * CONDITIONAL EDGE: Route after query classification
+ *
+ * Routes to decomposition if query is complex, otherwise routes directly to retrieval.
+ */
+function routeAfterQuery(state: AgentStateType): string | Array<Send> {
+  if (state.isComplex) {
+    console.log('→ Routing to decomposition')
+    return GRAPH_NODES.DECOMPOSE_QUERY
+  } else {
+    console.log('→ Routing directly to retrieval')
+    return continueToRetrieval(state)
+  }
+}
+
+/**
+ * CONDITIONAL EDGE: Fan out to parallel retrievals
+ *
+ * Creates a Send() for each query to execute retrievals in parallel.
+ * Each Send passes a QueryInput to the retrieve_documents node.
+ */
+function continueToRetrieval(state: AgentStateType): Array<Send> {
+  const { queries, messages, isComplex } = state
+
+  if (!isComplex || queries.length === 0) {
+    // Simple question - use single retrieval with original question
+    // Extract from messages if state.question is not available
+    const question = state.question || extractLatestQuestion(messages)
+    console.log('→ Single retrieval path')
+    return [
+      new Send(GRAPH_NODES.RETRIEVE_DOCUMENTS, {
+        query: question,
+        queryIndex: 0,
+        documents: [],
+      } as QueryInput),
+    ]
+  }
+
+  // Complex question - parallel retrieval for all sub-queries
+  console.log(`→ Parallel retrieval for ${queries.length} queries`)
+  return queries.map(
+    (query, index) =>
+      new Send(GRAPH_NODES.RETRIEVE_DOCUMENTS, {
+        query,
+        queryIndex: index,
+        documents: [],
+      } as QueryInput),
+  )
 }
 
 /**
@@ -249,49 +414,58 @@ function decideToGenerate(
   if (!hasDocuments) {
     if (currentStep >= maxRetries) {
       console.log('🚫 Max retries reached. Generating no answer.')
-      return 'no_answer'
+      return GRAPH_NODES.NO_ANSWER
     }
     console.log(
       `🔄 No documents found. Transforming query (attempt ${
         currentStep + 1
       }/${maxRetries})`,
     )
-    return 'transform_query'
+    return GRAPH_NODES.TRANSFORM_QUERY
   }
 
   console.log('✅ Documents found. Generating answer.')
-  return 'generate'
+  return GRAPH_NODES.GENERATE
 }
 
 /**
  * Build the Land Law Agentic Workflow Graph
  */
 export function buildLandLawGraph() {
-  const workflow = new StateGraph(AgentState)
+  const workflow = new StateGraph(AgentState, {
+    input: InputStateAnnotation,
+    context: LandLawAgentConfigurationSchema,
+  })
     // Add all nodes
-    .addNode('retrieve', retrieve)
-    .addNode('grade_documents', gradeDocuments)
-    .addNode('transform_query', transformQuery)
-    .addNode('generate', generate)
-    .addNode('no_answer', generateNoAnswer)
+    .addNode(GRAPH_NODES.ROUTE_QUERY, routeQuery)
+    .addNode(GRAPH_NODES.DECOMPOSE_QUERY, decomposeQuery)
+    .addNode(GRAPH_NODES.RETRIEVE_DOCUMENTS, retrieveDocuments)
+    .addNode(GRAPH_NODES.GRADE_DOCUMENTS, gradeDocuments)
+    .addNode(GRAPH_NODES.TRANSFORM_QUERY, transformQuery)
+    .addNode(GRAPH_NODES.GENERATE, generate)
+    .addNode(GRAPH_NODES.NO_ANSWER, generateNoAnswer)
 
-    // Define edges - start directly with retrieval
-    .addEdge(START, 'retrieve')
-    .addEdge('retrieve', 'grade_documents')
+    // START → Route Query
+    .addEdge(START, GRAPH_NODES.ROUTE_QUERY)
 
-    // Conditional edge: decide next step after grading
-    .addConditionalEdges('grade_documents', decideToGenerate, {
-      transform_query: 'transform_query',
-      generate: 'generate',
-      no_answer: 'no_answer',
-    })
+    // Route Query → Decompose (if complex) OR directly use Send for simple
+    .addConditionalEdges(GRAPH_NODES.ROUTE_QUERY, routeAfterQuery)
 
-    // Loop: transform query goes back to retrieve
-    .addEdge('transform_query', 'retrieve')
+    // Decompose → Parallel Retrieval (using Send)
+    .addConditionalEdges(GRAPH_NODES.DECOMPOSE_QUERY, continueToRetrieval)
+
+    // Parallel Retrievals → Grade Documents
+    .addEdge(GRAPH_NODES.RETRIEVE_DOCUMENTS, GRAPH_NODES.GRADE_DOCUMENTS)
+
+    // Grade Documents → Decide next step
+    .addConditionalEdges(GRAPH_NODES.GRADE_DOCUMENTS, decideToGenerate)
+
+    // Transform Query → Route Query (re-evaluate complexity)
+    .addEdge(GRAPH_NODES.TRANSFORM_QUERY, GRAPH_NODES.ROUTE_QUERY)
 
     // End states
-    .addEdge('generate', END)
-    .addEdge('no_answer', END)
+    .addEdge(GRAPH_NODES.GENERATE, END)
+    .addEdge(GRAPH_NODES.NO_ANSWER, END)
 
   // Compile the graph
   const app = workflow.compile()
