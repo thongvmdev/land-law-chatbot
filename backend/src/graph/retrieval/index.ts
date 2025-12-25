@@ -1,10 +1,6 @@
 import { VectorStoreRetriever } from '@langchain/core/vectorstores'
 import { WeaviateStore } from '@langchain/weaviate'
-import {
-  METADATA_KEYS,
-  OLLAMA_BASE_URL,
-  WEAVIATE_GENERAL_LAND_LAW_VN,
-} from '../../constants.js'
+import { METADATA_KEYS, WEAVIATE_GENERAL_LAND_LAW_VN } from '../../constants.js'
 import { getWeaviateClient } from '../../utils.js'
 import { getEmbeddingsModel } from '../../embeddings/index.js'
 import { BaseConfiguration } from '../../configuration.js'
@@ -15,8 +11,7 @@ export async function getWeaviateVectorStore(
   const client = await getWeaviateClient()
 
   const embeddings = getEmbeddingsModel(
-    baseConfiguration.embeddingModel,
-    OLLAMA_BASE_URL,
+    baseConfiguration.embeddingQueryUserModel,
   )
 
   if (!embeddings) {

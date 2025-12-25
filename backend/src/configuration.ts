@@ -8,13 +8,6 @@ import { RunnableConfig } from '@langchain/core/runnables'
 import { z } from 'zod'
 
 /**
- * Schema for backwards-compatible model name mapping
- */
-const MODEL_NAME_TO_RESPONSE_MODEL: Record<string, string> = {
-  anthropic_claude_3_5_sonnet: 'anthropic/claude-3-5-sonnet-20240620',
-}
-
-/**
  * BaseConfiguration schema using Zod for validation
  */
 export const BaseConfigurationSchema = z.object({
@@ -27,6 +20,11 @@ export const BaseConfigurationSchema = z.object({
     .string()
     .default('ollama/qwen3-embedding:0.6b')
     .describe('Name of the embedding model to use'),
+
+  embeddingQueryUserModel: z
+    .string()
+    .default('cloudflare/qwen3-embedding-0.6b')
+    .describe('Name of the embedding model to use for query user'),
 
   /**
    * The vector store provider to use for retrieval.
@@ -85,12 +83,6 @@ function updateConfigurableForBackwardsCompatibility(
 
   if ('k' in configurable) {
     update.searchKwargs = { k: configurable.k }
-  }
-
-  if ('model_name' in configurable) {
-    update.responseModel =
-      MODEL_NAME_TO_RESPONSE_MODEL[configurable.model_name] ||
-      configurable.model_name
   }
 
   if (Object.keys(update).length > 0) {

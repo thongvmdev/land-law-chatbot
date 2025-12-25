@@ -173,7 +173,7 @@ async function gradeDocuments(
   const agentConfig = getLandLawAgentConfiguration(config)
 
   // Get threshold and minimum documents from config
-  const scoreThreshold = agentConfig.scoreThreshold ?? 0.7
+  const scoreThreshold = agentConfig.scoreThreshold ?? 0.5
 
   if (!documents || documents.length === 0) {
     console.log('⚠️ No documents to grade')

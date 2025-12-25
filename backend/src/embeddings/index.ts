@@ -11,6 +11,7 @@
 import { Embeddings } from '@langchain/core/embeddings'
 import { OpenAIEmbeddings } from '@langchain/openai'
 import { OllamaEmbeddings } from '@langchain/ollama'
+import { CloudflareEmbeddings } from './cloudflare.js'
 import { OLLAMA_BASE_URL } from '../constants.js'
 
 /**
@@ -39,13 +40,29 @@ export function getEmbeddingsModel(
         headers: {
           'X-API-Key': ollamaApiKey,
         },
-        dimensions: 768,
+        dimensions: 1024,
       })
 
     case 'openai':
       return new OpenAIEmbeddings({
         model: modelName,
         batchSize: 200,
+      })
+
+    case 'cloudflare':
+      const cloudflareAccountId = process.env.CLOUDFLARE_ACCOUNT_ID
+      const cloudflareApiToken = process.env.CLOUDFLARE_API_TOKEN
+
+      if (!cloudflareAccountId || !cloudflareApiToken) {
+        throw new Error(
+          'Cloudflare embeddings require CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN environment variables',
+        )
+      }
+
+      return new CloudflareEmbeddings({
+        accountId: cloudflareAccountId,
+        apiToken: cloudflareApiToken,
+        model: '@cf/qwen/qwen3-embedding-0.6b',
       })
 
     case 'weaviate':

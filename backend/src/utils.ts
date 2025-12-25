@@ -204,8 +204,7 @@ export function loadChatModel(fullySpecifiedName: string): BaseChatModel {
         model,
         ...baseConfig,
         streaming: true,
-        // baseUrl: process.env.OLLAMA_BASE_URL || 'http://localhost:11434',
-        baseUrl: 'http://localhost:11434',
+        baseUrl: process.env.OLLAMA_BASE_URL || 'http://localhost:11434',
       })
 
     default:
@@ -246,6 +245,7 @@ export function reduceDocs(
   return combinedByUuid
 }
 
+// TODO: double check logic later when integrate with FE
 export function formatConversationHistory(
   messages: BaseMessage[],
   keepRecentTurns: number = 3,
