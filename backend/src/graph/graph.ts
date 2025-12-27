@@ -63,9 +63,6 @@ async function routeQuery(
   const systemPrompt = await PROMPTS.ROUTE_QUERY.formatMessages({ question })
   const result = await router.invoke(systemPrompt, config)
 
-  console.log(
-    `🔍 Query Classification: ${result.is_complex ? 'COMPLEX' : 'SIMPLE'}`,
-  )
   console.log(`💭 Reasoning: ${result.reasoning}`)
 
   return {
@@ -302,6 +299,10 @@ async function generate(
       : JSON.stringify(response.content)
 
   console.log('✅ Answer Generated')
+
+  console.log('🔍 Usage Metadata:', {
+    ...response.usage_metadata,
+  })
 
   return {
     messages: [response],

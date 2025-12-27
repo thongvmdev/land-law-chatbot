@@ -78,25 +78,28 @@ export async function getWeaviateClient(
 }
 
 /**
- * Format a single document as XML.
+ * Format a single document with structured header.
  *
  * @param doc - The document to format
- * @returns The formatted document as an XML string
+ * @returns The formatted document with chapter, section, and title headers
  */
 function formatDoc(doc: Document): string {
   const metadata = doc.metadata || {}
-  const pickFields: (keyof MetadataKey)[] = [
-    'title',
-    'chapter_title',
-    'section_title',
-    'chunk_footnotes',
-  ]
-  const metaStr = Object.entries(metadata)
-    .filter(([k]) => pickFields.includes(k as keyof MetadataKey))
-    .map(([k, v]) => ` ${k}="${v}"`)
-    .join('')
+  const header: string[] = []
 
-  return `<document${metaStr}>\n${doc.pageContent}\n</document>`
+  // Add chapter information
+  if (metadata.chapter_id && metadata.chapter_title) {
+    header.push(`Chương ${metadata.chapter_id}: ${metadata.chapter_title}`)
+  }
+
+  // Add section information if available
+  if (metadata.section_id && metadata.section_title) {
+    header.push(`Mục ${metadata.section_id}: ${metadata.section_title}`)
+  }
+
+  const headerStr = header.length > 0 ? header.join('\n') + '\n' : ''
+
+  return `<document>\n${headerStr}${doc.pageContent}\n</document>`
 }
 
 /**
@@ -164,6 +167,7 @@ export function loadChatModel(fullySpecifiedName: string): BaseChatModel {
 
   const baseConfig = {
     temperature: 0,
+    cache: true,
   }
 
   console.log('🚀 ~ model:', model, 'provider:', provider)

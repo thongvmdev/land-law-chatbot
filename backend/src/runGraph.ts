@@ -28,7 +28,8 @@ async function testGraph(): Promise<void> {
     ]
 
     // Use the first question for testing
-    const question = 'Điều 152 quy định gì?'
+    const question =
+      'Quyền sử dụng đất của hộ gia đình được quy định như thế nào?'
     console.log(`📝 Question: ${question}\n`)
 
     const result = await landLawGraph.invoke({
