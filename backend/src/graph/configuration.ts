@@ -81,7 +81,7 @@ export const LandLawAgentConfigurationSchema = BaseConfigurationSchema.extend({
    */
   responseModel: z
     .string()
-    .default('openai/gpt-4.1-mini') // qwen3:8b, openai/gpt-4.1-mini
+    .default('groq/llama-3.1-8b-instant') // qwen3:8b, openai/gpt-4.1-mini
     .describe('The language model used for generating responses'),
 
   /**
