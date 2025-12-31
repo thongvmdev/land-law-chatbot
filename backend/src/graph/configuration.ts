@@ -59,6 +59,41 @@ export const DecompositionSchema = z.object({
 export type Decomposition = z.infer<typeof DecompositionSchema>
 
 /**
+ * Schema for document relevance check in Map phase
+ */
+export const DocumentRelevanceSchema = z.object({
+  is_relevant: z
+    .boolean()
+    .describe('Is this document relevant to the user query?'),
+  reasoning: z
+    .string()
+    .optional()
+    .describe('Brief explanation of relevance decision'),
+})
+
+export type DocumentRelevance = z.infer<typeof DocumentRelevanceSchema>
+
+/**
+ * Schema for partial answer generation in Map phase
+ */
+export const PartialAnswerSchema = z.object({
+  has_answer: z
+    .boolean()
+    .describe('Does this document contain information to answer the query?'),
+  partial_answer: z
+    .string()
+    .describe(
+      'Partial answer based on this document, or empty string if not relevant',
+    ),
+  source_reference: z
+    .string()
+    .optional()
+    .describe('Reference to article/section used (e.g., Điều 152)'),
+})
+
+export type PartialAnswer = z.infer<typeof PartialAnswerSchema>
+
+/**
  * LandLawAgentConfiguration extends BaseConfiguration with agent-specific settings
  */
 export const LandLawAgentConfigurationSchema = BaseConfigurationSchema.extend({
@@ -81,7 +116,7 @@ export const LandLawAgentConfigurationSchema = BaseConfigurationSchema.extend({
    */
   responseModel: z
     .string()
-    .default('groq/llama-3.1-8b-instant') // qwen3:8b, openai/gpt-4.1-mini
+    .default('groq/gpt-oss-safeguard-20b') // qwen3:8b, openai/gpt-4.1-mini, llama-3.3-70b-versatile, openai/gpt-oss-safeguard-20b
     .describe('The language model used for generating responses'),
 
   /**
@@ -114,7 +149,7 @@ export const LandLawAgentConfigurationSchema = BaseConfigurationSchema.extend({
     .number()
     .min(0)
     .max(2)
-    .default(0.3)
+    .default(0.2)
     .describe('Temperature for response generation (higher = more creative)'),
 
   /**
@@ -126,7 +161,7 @@ export const LandLawAgentConfigurationSchema = BaseConfigurationSchema.extend({
     .number()
     .min(0)
     .max(1)
-    .default(0.6)
+    .default(0.5)
     .describe('Minimum hybrid search score for document relevance'),
 
   /**
@@ -162,6 +197,42 @@ export const LandLawAgentConfigurationSchema = BaseConfigurationSchema.extend({
     .max(10)
     .default(4)
     .describe('Documents to retrieve per sub-query in parallel retrieval'),
+
+  /**
+   * Maximum total tokens for standard single-pass generation
+   * Above this, use Map-Reduce approach
+   * @default 100000
+   */
+  maxContextTokens: z
+    .number()
+    .min(50000)
+    .max(200000)
+    .default(100000)
+    .describe('Maximum context tokens before switching to Map-Reduce'),
+
+  /**
+   * Token threshold for individual large documents
+   * Documents exceeding this are considered large
+   * @default 10000
+   */
+  largeDocTokenThreshold: z
+    .number()
+    .min(5000)
+    .max(50000)
+    .default(10000)
+    .describe('Token threshold for large documents'),
+
+  /**
+   * Document count threshold for Map-Reduce
+   * Above this count, consider Map-Reduce strategy
+   * @default 8
+   */
+  mapReduceDocThreshold: z
+    .number()
+    .min(5)
+    .max(20)
+    .default(6)
+    .describe('Document count threshold for Map-Reduce strategy'),
 })
 
 export type LandLawAgentConfiguration = z.infer<

@@ -15,6 +15,7 @@
 
 import { StateGraph, START, END, Send } from '@langchain/langgraph'
 import { RunnableConfig } from '@langchain/core/runnables'
+import { Document } from '@langchain/core/documents'
 import {
   AgentState,
   AgentStateType,
@@ -26,6 +27,8 @@ import {
   RouteSchema,
   DecompositionSchema,
   LandLawAgentConfigurationSchema,
+  PartialAnswerSchema,
+  PartialAnswer,
 } from './configuration.js'
 import { PROMPTS } from './prompts.js'
 import {
@@ -33,11 +36,15 @@ import {
   formatDocs,
   extractLatestQuestion,
   formatConversationHistory,
+  countTotalDocumentTokens,
+  countDocumentTokens,
+  formatDoc,
 } from '../utils.js'
 import { getWeaviateVectorStore } from './retrieval'
 import { HybridOptions } from 'weaviate-client'
 import { getBaseConfiguration } from '../configuration.js'
 import { GRAPH_NODES } from '../constants.js'
+import { BaseMessage } from '@langchain/core/messages'
 
 /**
  * NODE 1: Route Query
@@ -248,23 +255,23 @@ async function transformQuery(
   return {
     question: betterQuestion,
     loop_step: loop_step + 1,
-    // Reset complexity flag to re-evaluate after transformation
     isComplex: false,
     queries: [],
   }
 }
 
 /**
- * NODE 6: Generate Answer
+ * NODE 6A: Generate Answer - Standard Single Pass
  *
  * Generates the final answer based on the retrieved and graded documents.
  * Uses the response model with higher temperature for natural language.
+ * Used when document count and token count are within acceptable limits.
  */
-async function generate(
+async function generateStandard(
   state: AgentStateType,
   config?: RunnableConfig,
 ): Promise<Partial<AgentStateType>> {
-  console.log('---GENERATE---')
+  console.log('---GENERATE (STANDARD)---')
   const { messages: stateMessages, documents } = state
   const agentConfig = getLandLawAgentConfiguration(config)
 
@@ -298,7 +305,7 @@ async function generate(
       ? response.content
       : JSON.stringify(response.content)
 
-  console.log('✅ Answer Generated')
+  console.log('✅ Answer Generated (Standard)')
 
   console.log('🔍 Usage Metadata:', {
     ...response.usage_metadata,
@@ -307,6 +314,210 @@ async function generate(
   return {
     messages: [response],
     answer: generation || 'No answer generated',
+  }
+}
+
+/**
+ * NODE 6B: Map Phase - Generate partial answer from single document
+ *
+ * Processes a single document to extract relevant information.
+ * Returns structured output with relevance check and partial answer.
+ */
+async function mapDocumentToAnswer(
+  doc: Document,
+  question: string,
+  config?: RunnableConfig,
+): Promise<PartialAnswer> {
+  const agentConfig = getLandLawAgentConfiguration(config)
+  const model = loadChatModel(agentConfig.responseModel)
+
+  // Bind structured output schema
+  const structuredModel = model.withStructuredOutput(PartialAnswerSchema, {
+    name: 'map_document_answer',
+  })
+
+  const formattedDoc = formatDoc(doc)
+  const messages = await PROMPTS.MAP_DOCUMENT.formatMessages({
+    document: formattedDoc,
+    question,
+  })
+
+  const result = await structuredModel.invoke(messages, config)
+
+  // Log processing
+  const articleId = doc.metadata?.article_id || 'Unknown'
+  if (result.has_answer) {
+    console.log(
+      `  ✅ Relevant doc: ${articleId} (${result.source_reference || 'N/A'})`,
+    )
+  } else {
+    console.log(`  ⏭️  Skipped: ${articleId}`)
+  }
+
+  return result
+}
+
+/**
+ * NODE 6C: Reduce Phase - Synthesize partial answers into final response
+ *
+ * Combines all partial answers from relevant documents into a coherent response.
+ */
+async function reducePartialAnswers(
+  partialAnswers: PartialAnswer[],
+  question: string,
+  conversationHistory: string,
+  config?: RunnableConfig,
+): Promise<BaseMessage> {
+  const agentConfig = getLandLawAgentConfiguration(config)
+  const model = loadChatModel(agentConfig.responseModel)
+
+  // Format partial answers with references
+  const formattedAnswers = partialAnswers
+    .map((answer, idx) => {
+      const ref = answer.source_reference || `Nguồn ${idx + 1}`
+      return `[${ref}]\n${answer.partial_answer}`
+    })
+    .join('\n\n---\n\n')
+
+  const messages = await PROMPTS.REDUCE_ANSWERS.formatMessages({
+    question,
+    partial_answers: formattedAnswers,
+    history:
+      conversationHistory ||
+      'Chưa có lịch sử hội thoại (đây là câu hỏi đầu tiên).',
+  })
+
+  const response = await model.invoke(messages, config)
+
+  return response
+}
+
+/**
+ * NODE 6D: Generate Answer - Map-Reduce Strategy
+ *
+ * Uses Map-Reduce pattern for large document sets:
+ * 1. Map: Process each document individually to extract relevant info
+ * 2. Reduce: Synthesize all partial answers into final response
+ *
+ * This approach handles token limits better for large document sets.
+ */
+async function generateMapReduce(
+  state: AgentStateType,
+  config?: RunnableConfig,
+): Promise<Partial<AgentStateType>> {
+  console.log('---GENERATE (MAP-REDUCE)---')
+  const { messages: stateMessages, documents } = state
+
+  // Extract question from messages (use cached state.question if available)
+  const question = state.question || extractLatestQuestion(stateMessages)
+
+  // MAP PHASE: Process each document in parallel
+  console.log(
+    `🗺️  Map phase: Processing ${documents.length} documents in parallel...`,
+  )
+
+  const partialAnswerPromises = documents.map((doc) =>
+    mapDocumentToAnswer(doc, question, config),
+  )
+
+  const allPartialAnswers = await Promise.all(partialAnswerPromises)
+
+  // Filter to keep only relevant answers
+  const relevantAnswers = allPartialAnswers.filter(
+    (answer) => answer.has_answer && answer.partial_answer.trim().length > 0,
+  )
+
+  console.log(
+    `📊 Relevant documents: ${relevantAnswers.length}/${documents.length}`,
+  )
+
+  // Handle case where no relevant documents found
+  if (relevantAnswers.length === 0) {
+    console.log('⚠️ No relevant information found in documents')
+    return {
+      answer:
+        'Xin lỗi, tôi không tìm thấy thông tin liên quan trong cơ sở dữ liệu để trả lời câu hỏi của bạn.',
+      messages: [],
+    }
+  }
+
+  // REDUCE PHASE: Synthesize final answer
+  console.log('🔄 Reduce phase: Synthesizing final answer...')
+
+  const conversationHistory = formatConversationHistory(
+    stateMessages.slice(0, -1),
+  )
+
+  const finalAnswer = await reducePartialAnswers(
+    relevantAnswers,
+    question,
+    conversationHistory,
+    config,
+  )
+
+  console.log(
+    `✅ Map-Reduce complete (${documents.length} → ${relevantAnswers.length} → 1)`,
+  )
+
+  const generation =
+    typeof finalAnswer.content === 'string'
+      ? finalAnswer.content
+      : JSON.stringify(finalAnswer.content)
+
+  console.log('✅ Answer Generated (Standard)')
+
+  return {
+    messages: [finalAnswer],
+    answer: generation || 'No answer generated',
+  }
+
+  // return {
+  //   answer: finalAnswer,
+  //   messages: [],
+  // }
+}
+
+/**
+ * NODE 6: Generate Answer - Hybrid Strategy
+ *
+ * Intelligently selects between standard single-pass and Map-Reduce based on:
+ * - Total document count
+ * - Total token count
+ * - Presence of large individual documents
+ */
+async function generate(
+  state: AgentStateType,
+  config?: RunnableConfig,
+): Promise<Partial<AgentStateType>> {
+  const { documents } = state
+  const agentConfig = getLandLawAgentConfiguration(config)
+
+  // Calculate metrics
+  const docCount = documents.length
+  const totalTokens = countTotalDocumentTokens(documents)
+  const hasLargeDoc = documents.some(
+    (doc) => countDocumentTokens(doc) > agentConfig.largeDocTokenThreshold,
+  )
+
+  console.log('📊 Document Metrics:', {
+    count: docCount,
+    totalTokens,
+    hasLargeDoc,
+    avgTokensPerDoc: Math.round(totalTokens / docCount),
+  })
+
+  // DECISION LOGIC: Choose strategy
+  const useMapReduce =
+    docCount > agentConfig.mapReduceDocThreshold ||
+    totalTokens > agentConfig.maxContextTokens ||
+    (hasLargeDoc && docCount > 4)
+
+  if (useMapReduce) {
+    console.log('→ Strategy: MAP-REDUCE (large document set)')
+    return await generateMapReduce(state, config)
+  } else {
+    console.log('→ Strategy: STANDARD (single pass)')
+    return await generateStandard(state, config)
   }
 }
 

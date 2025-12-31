@@ -355,7 +355,10 @@ HƯỚNG DẪN TRẢ LỜI:
 
 5. **TẠO VÍ DỤ**
    - Dựa trên quy định THỰC TẾ trong tài liệu
-   - KHÔNG bịa đặt thông tin`,
+   - KHÔNG bịa đặt thông tin
+   - BẮT BUỘC cung cấp 1-2 ví dụ cụ thể từ tài liệu được cung cấp
+   - Ví dụ phải minh họa rõ ràng cho quy định pháp luật
+   - Sử dụng trích dẫn trực tiếp hoặc tình huống thực tế từ văn bản pháp luật`,
   ],
   [
     'human',
@@ -423,6 +426,121 @@ export async function formatPrompt(
 }
 
 /**
+ * Prompt for Map phase: Generate partial answer from single document
+ * Uses consolidated system context for caching
+ */
+export const MAP_DOCUMENT_PROMPT = ChatPromptTemplate.fromMessages([
+  [
+    'system',
+    `${CORE_SYSTEM_CONTEXT}
+
+---
+
+🎯 NHIỆM VỤ CỤ THỂ: TẠO CÂU TRẢ LỜI TỪ MỘT TÀI LIỆU
+
+Bạn đang phân tích MỘT tài liệu pháp luật để trả lời câu hỏi của người dùng.
+
+YÊU CẦU:
+
+1. **ĐÁNH GIÁ MỨC ĐỘ LIÊN QUAN**
+   - has_answer: true nếu tài liệu chứa thông tin trả lời câu hỏi
+   - has_answer: false nếu tài liệu không liên quan
+
+2. **TẠO CÂU TRẢ LỜI TỪNG PHẦN (nếu has_answer = true)**
+   - Trả lời DỰA TRÊN tài liệu này
+   - Trích dẫn rõ: Điều, Khoản
+   - Ngắn gọn, tập trung vào thông tin chính
+   - Không cần câu mở đầu/kết luận
+   - Nếu tài liệu có ví dụ hoặc trường hợp cụ thể, hãy đưa vào câu trả lời
+   
+3. **NẾU KHÔNG LIÊN QUAN (has_answer = false)**
+   - Để partial_answer = chuỗi rỗng
+   - Không bịa đặt thông tin
+
+4. **TRÍCH DẪN NGUỒN**
+   - source_reference: Ghi rõ Điều/Khoản được sử dụng
+
+CHÚ Ý:
+- Chỉ viết về những gì TÀI LIỆU NÀY chứa
+- Không tổng hợp từ nhiều nguồn
+- Không thêm thông tin ngoài tài liệu`,
+  ],
+  [
+    'human',
+    `📄 TÀI LIỆU:
+{document}
+
+❓ CÂU HỎI:
+{question}
+
+Phân tích và trả lời theo schema: has_answer, partial_answer, source_reference`,
+  ],
+])
+
+/**
+ * Prompt for Reduce phase: Synthesize partial answers into final response
+ * Uses consolidated system context for caching
+ */
+export const REDUCE_ANSWERS_PROMPT = ChatPromptTemplate.fromMessages([
+  [
+    'system',
+    `${CORE_SYSTEM_CONTEXT}
+
+---
+
+🎯 NHIỆM VỤ CỤ THỂ: TỔNG HỢP CÁC CÂU TRẢ LỜI TỪNG PHẦN
+
+Bạn nhận được nhiều câu trả lời từng phần từ các tài liệu khác nhau.
+Nhiệm vụ: Tổng hợp thành MỘT câu trả lời hoàn chỉnh, mạch lạc.
+
+YÊU CẦU:
+
+1. **TỔNG HỢP THÔNG TIN**
+   - Kết hợp tất cả thông tin quan trọng
+   - Loại bỏ trùng lặp
+   - Sắp xếp logic, dễ hiểu
+
+2. **CẤU TRÚC TRẢ LỜI**
+   - Trả lời trực tiếp câu hỏi trước
+   - Cung cấp chi tiết từ các nguồn
+   - Trích dẫn đầy đủ: Điều, Khoản
+   - Kết luận hoặc lưu ý quan trọng (nếu có)
+
+3. **XỬ LÝ THÔNG TIN TRÙNG LẶP**
+   - Nếu nhiều nguồn nói cùng nội dung → Gộp lại
+   - Nếu có thông tin bổ sung → Tích hợp hợp lý
+   - Nếu có mâu thuẫn → Ưu tiên nguồn rõ ràng hơn
+
+4. **TRÍCH DẪN**
+   - Giữ nguyên trích dẫn từ các câu trả lời
+   - Đảm bảo tính chính xác pháp lý
+
+5. **VÍ DỤ MINH HỌA**
+   - BẮT BUỘC cung cấp 1-2 ví dụ cụ thể từ các câu trả lời được cung cấp
+   - Ví dụ phải minh họa rõ ràng cho quy định pháp luật
+   - Sử dụng trích dẫn trực tiếp hoặc tình huống thực tế từ các tài liệu
+
+CHÚ Ý:
+- Giọng điệu nhất quán, chuyên nghiệp
+- Không thêm thông tin không có trong câu trả lời từng phần
+- Câu trả lời cuối phải ĐẦY ĐỦ và DỄ HIỂU`,
+  ],
+  [
+    'human',
+    `❓ CÂU HỎI:
+{question}
+
+📚 CÁC CÂU TRẢ LỜI TỪNG PHẦN:
+{partial_answers}
+
+💬 LỊCH SỬ HỘI THOẠI (nếu có):
+{history}
+
+Tổng hợp thành câu trả lời cuối cùng:`,
+  ],
+])
+
+/**
  * Export all prompts as a collection for easy access
  */
 export const PROMPTS = {
@@ -432,4 +550,6 @@ export const PROMPTS = {
   QUERY_TRANSFORM: QUERY_TRANSFORM_PROMPT,
   GENERATION: GENERATION_PROMPT,
   NO_ANSWER: NO_ANSWER_PROMPT,
+  MAP_DOCUMENT: MAP_DOCUMENT_PROMPT,
+  REDUCE_ANSWERS: REDUCE_ANSWERS_PROMPT,
 }

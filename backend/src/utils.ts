@@ -77,13 +77,7 @@ export async function getWeaviateClient(
   return client
 }
 
-/**
- * Format a single document with structured header.
- *
- * @param doc - The document to format
- * @returns The formatted document with chapter, section, and title headers
- */
-function formatDoc(doc: Document): string {
+export function formatDoc(doc: Document): string {
   const metadata = doc.metadata || {}
   const header: string[] = []
 
@@ -99,41 +93,56 @@ function formatDoc(doc: Document): string {
 
   const headerStr = header.length > 0 ? header.join('\n') + '\n' : ''
 
-  return `<document>\n${headerStr}${doc.pageContent}\n</document>`
+  return `${headerStr}${doc.pageContent}`
+}
+
+export function formatDocs(docs: Document[] | null | undefined): string {
+  if (!docs || docs.length === 0) {
+    return ''
+  }
+  const formatted = docs.map((doc) => formatDoc(doc)).join('\n\n')
+  return `<documents>\n${formatted}\n</documents>`
 }
 
 /**
- * Format a list of documents as XML.
+ * Count tokens using character-based estimation
+ * Adjusted for Vietnamese text: 1 token ≈ 2.5 characters
  *
- * This function takes a list of Document objects and formats them into a single XML string.
+ * This is a fast, lightweight method that works well for:
+ * - Quick token estimates
+ * - Decision-making (e.g., choosing generation strategy)
+ * - Vietnamese/Mixed language text
  *
- * @param docs - A list of Document objects to format, or null
- * @returns A string containing the formatted documents in XML format
- *
- * @example
- * ```typescript
- * const docs = [
- *   new Document({ pageContent: "Hello" }),
- *   new Document({ pageContent: "World" })
- * ];
- * console.log(formatDocs(docs));
- * // Output:
- * // <documents>
- * // <document>
- * // Hello
- * // </document>
- * // <document>
- * // World
- * // </document>
- * // </documents>
- * ```
+ * @param text - Text to count tokens for
+ * @returns Estimated token count
  */
-export function formatDocs(docs: Document[] | null | undefined): string {
-  if (!docs || docs.length === 0) {
-    return '<documents></documents>'
-  }
-  const formatted = docs.map((doc) => formatDoc(doc)).join('\n')
-  return `<documents>\n${formatted}\n</documents>`
+export function countTokens(text: string): number {
+  // Vietnamese text tokenizes worse than English for GPT models
+  // Average for Vietnamese: ~2.5 characters per token
+  return Math.ceil(text.length / 2.5)
+}
+
+/**
+ * Calculate total tokens for a document including metadata
+ * Uses character-based estimation
+ *
+ * @param doc - Document to count tokens for
+ * @returns Estimated token count for formatted document
+ */
+export function countDocumentTokens(doc: Document): number {
+  const formatted = formatDoc(doc)
+  return countTokens(formatted)
+}
+
+/**
+ * Calculate total tokens for an array of documents
+ * Uses character-based estimation
+ *
+ * @param docs - Array of documents to count tokens for
+ * @returns Total estimated token count across all documents
+ */
+export function countTotalDocumentTokens(docs: Document[]): number {
+  return docs.reduce((total, doc) => total + countDocumentTokens(doc), 0)
 }
 
 /**
