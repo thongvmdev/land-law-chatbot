@@ -23,6 +23,22 @@ export const GraderSchema = z.object({
 export type Grader = z.infer<typeof GraderSchema>
 
 /**
+ * Schema for checking if question is related to Land Law
+ */
+export const LandLawRelevanceSchema = z.object({
+  is_related_to_land_law: z
+    .boolean()
+    .describe(
+      'Câu hỏi có liên quan đến Luật Đất đai 2024 không? true = có, false = không',
+    ),
+  reasoning: z
+    .string()
+    .describe('Lý do ngắn gọn giải thích tại sao câu hỏi có/không liên quan'),
+})
+
+export type LandLawRelevance = z.infer<typeof LandLawRelevanceSchema>
+
+/**
  * Schema for query routing
  */
 export const RouteSchema = z.object({
@@ -116,7 +132,7 @@ export const LandLawAgentConfigurationSchema = BaseConfigurationSchema.extend({
    */
   responseModel: z
     .string()
-    .default('groq/gpt-oss-safeguard-20b') // qwen3:8b, openai/gpt-4.1-mini, llama-3.3-70b-versatile, openai/gpt-oss-safeguard-20b
+    .default('groq/qwen3-32b') // qwen3:8b, openai/gpt-4.1-mini, llama-3.3-70b-versatile, openai/gpt-oss-safeguard-20b
     .describe('The language model used for generating responses'),
 
   /**

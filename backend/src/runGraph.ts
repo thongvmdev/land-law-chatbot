@@ -32,7 +32,9 @@ async function testGraph(): Promise<void> {
       'Quyền sử dụng đất của hộ gia đình được quy định như thế nào?'
     console.log(`📝 Question: ${question}\n`)
 
-    const result = await landLawGraph.invoke({
+    const result = await (
+      await landLawGraph
+    ).invoke({
       messages: [new HumanMessage(question)],
     })
 

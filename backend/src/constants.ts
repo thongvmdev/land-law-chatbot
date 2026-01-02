@@ -43,6 +43,7 @@ export const METADATA_KEYS: (keyof MetadataKey)[] = [
 
 // Graph node names
 export const GRAPH_NODES = {
+  CHECK_RELEVANCE: 'check_relevance',
   ROUTE_QUERY: 'route_query',
   DECOMPOSE_QUERY: 'decompose_query',
   RETRIEVE_DOCUMENTS: 'retrieve_documents',
@@ -50,4 +51,5 @@ export const GRAPH_NODES = {
   TRANSFORM_QUERY: 'transform_query',
   GENERATE: 'generate',
   NO_ANSWER: 'no_answer',
+  REJECT_QUESTION: 'reject_question',
 } as const

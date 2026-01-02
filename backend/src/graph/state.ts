@@ -71,6 +71,16 @@ export const AgentState = Annotation.Root({
   }),
 
   /**
+   * Flag indicating if question is related to Land Law
+   */
+  isRelatedToLandLaw: Annotation<boolean>({
+    value: (_existing, newIsRelated) => {
+      return newIsRelated
+    },
+    default: () => true,
+  }),
+
+  /**
    * Flag indicating if question is complex and needs decomposition
    */
   isComplex: Annotation<boolean>({

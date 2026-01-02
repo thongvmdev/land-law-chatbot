@@ -199,6 +199,48 @@ Chương XVI. ĐIỀU KHOẢN THI HÀNH (Điều 243-260)
 - Chỉ cung cấp thông tin tham khảo từ Luật Đất đai 2024`
 
 /**
+ * Prompt for checking if question is related to Land Law
+ * Uses consolidated system context for caching
+ */
+export const CHECK_LAND_LAW_RELEVANCE_PROMPT = ChatPromptTemplate.fromMessages([
+  [
+    'system',
+    `${CORE_SYSTEM_CONTEXT}
+
+---
+
+🎯 NHIỆM VỤ CỤ THỂ: KIỂM TRA CÂU HỎI CÓ LIÊN QUAN ĐẾN LUẬT ĐẤT ĐAI 2024
+
+Xác định xem câu hỏi của người dùng có liên quan đến Luật Đất đai Việt Nam 2024 hay không.
+
+TIÊU CHÍ ĐÁNH GIÁ:
+✅ RELATED (is_related_to_land_law: true) nếu câu hỏi về:
+   - Quyền sử dụng đất, quyền và nghĩa vụ của người sử dụng đất
+   - Các loại đất: nông nghiệp, phi nông nghiệp, đất ở, đất thương mại, v.v.
+   - Thủ tục về đất đai: chuyển nhượng, cho thuê, thừa kế, thế chấp, chuyển mục đích
+   - Giấy chứng nhận quyền sử dụng đất, đăng ký đất đai
+   - Thu hồi đất, bồi thường, hỗ trợ, tái định cư
+   - Giá đất, tiền sử dụng đất, tiền thuê đất
+   - Quy hoạch, kế hoạch sử dụng đất
+   - Tranh chấp đất đai, khiếu nại, tố cáo
+   - Quản lý nhà nước về đất đai
+   - Bất kỳ điều khoản, quy định nào trong Luật Đất đai 2024
+
+❌ NOT RELATED (is_related_to_land_law: false) nếu câu hỏi về:
+   - Luật khác: Dân sự, Hình sự, Lao động, Hôn nhân và gia đình, v.v.
+   - Các vấn đề không liên quan đến đất đai
+   - Xin chào, hỏi thăm, trò chuyện thông thường
+   - Câu hỏi về chủ đề hoàn toàn khác
+
+HƯỚNG DẪN:
+- Nếu câu hỏi mơ hồ nhưng CÓ THỂ liên quan đến đất đai → trả về true
+- Chỉ trả về false khi CHẮC CHẮN câu hỏi KHÔNG liên quan đến đất đai
+- Cung cấp lý do ngắn gọn (reasoning) để giải thích quyết định`,
+  ],
+  ['human', 'Câu hỏi: {question}'],
+])
+
+/**
  * Prompt for grading document relevance
  * Uses consolidated system context for caching
  */
@@ -379,17 +421,7 @@ HƯỚNG DẪN TRẢ LỜI:
  */
 export const NO_ANSWER_PROMPT = ChatPromptTemplate.fromMessages([
   [
-    'system',
-    `${CORE_SYSTEM_CONTEXT}
-
----
-
-🎯 NHIỆM VỤ CỤ THỂ: XỬ LÝ KHÔNG TÌM THẤY THÔNG TIN
-
-Hệ thống không tìm thấy thông tin phù hợp. Hướng dẫn người dùng chuyên nghiệp.`,
-  ],
-  [
-    'human',
+    'ai',
     `Xin lỗi, tôi không thể tìm thấy thông tin phù hợp trong Luật Đất đai 2024.
 
 Câu hỏi: {question}
@@ -541,15 +573,53 @@ Tổng hợp thành câu trả lời cuối cùng:`,
 ])
 
 /**
+ * Prompt for rejecting questions not related to Land Law
+ * Uses consolidated system context for caching
+ */
+export const REJECT_QUESTION_PROMPT = ChatPromptTemplate.fromMessages([
+  [
+    'ai',
+    `Xin chào! Tôi là trợ lý AI chuyên về **Luật Đất đai Việt Nam 2024**.
+
+Câu hỏi của bạn: "{question}"
+
+Câu hỏi này có vẻ **không liên quan đến Luật Đất đai**. Tôi chỉ có thể hỗ trợ trả lời các câu hỏi về:
+
+📋 **CÁC CHỦ ĐỀ TÔI CÓ THỂ HỖ TRỢ:**
+• Quyền sử dụng đất, quyền và nghĩa vụ của người sử dụng đất \n
+• Các loại đất: nông nghiệp, phi nông nghiệp, đất ở, đất thương mại, v.v. \n
+• Thủ tục về đất đai: chuyển nhượng, cho thuê, thừa kế, thế chấp, chuyển mục đích \n
+• Giấy chứng nhận quyền sử dụng đất, đăng ký đất đai \n
+• Thu hồi đất, bồi thường, hỗ trợ, tái định cư \n
+• Giá đất, tiền sử dụng đất, tiền thuê đất \n
+• Quy hoạch, kế hoạch sử dụng đất \n
+• Tranh chấp đất đai, khiếu nại, tố cáo \n
+• Các điều khoản cụ thể trong Luật Đất đai 2024 \n
+
+💡 **GỢI Ý:**
+Vui lòng đặt lại câu hỏi liên quan đến các chủ đề trên để tôi có thể hỗ trợ bạn tốt nhất!
+
+**Ví dụ câu hỏi:**
+- "Thời hạn sử dụng đất ở là bao lâu theo Luật Đất đai 2024?"
+- "Thủ tục chuyển nhượng quyền sử dụng đất ở như thế nào?"
+- "Điều 152 Luật Đất đai 2024 quy định gì về giá đất?"
+
+Tôi sẵn sàng hỗ trợ bạn! 🌟`,
+  ],
+])
+
+/**
  * Export all prompts as a collection for easy access
  */
 export const PROMPTS = {
+  CHECK_LAND_LAW_RELEVANCE: CHECK_LAND_LAW_RELEVANCE_PROMPT,
   ROUTE_QUERY: ROUTE_QUERY_PROMPT,
   DECOMPOSE_QUERY: DECOMPOSE_QUERY_PROMPT,
   GRADER: GRADER_PROMPT,
   QUERY_TRANSFORM: QUERY_TRANSFORM_PROMPT,
   GENERATION: GENERATION_PROMPT,
   NO_ANSWER: NO_ANSWER_PROMPT,
+  REJECT_QUESTION: REJECT_QUESTION_PROMPT,
   MAP_DOCUMENT: MAP_DOCUMENT_PROMPT,
   REDUCE_ANSWERS: REDUCE_ANSWERS_PROMPT,
 }
