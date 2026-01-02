@@ -8,6 +8,7 @@
         "build": "tsc",
         "dev": "tsx watch src/server.ts",
         "langgraph:dev": "langgraphjs dev",
+        "langgraph:up": "langgraphjs up --postgres-uri postgresql://postgres:zkdtn1234@host.docker.internal:5432/langgraph_persistence",
         "start": "node dist/server.js",
         "ingest": "tsx src/ingest/index.ts",
         "gr": "tsx src/main.ts",

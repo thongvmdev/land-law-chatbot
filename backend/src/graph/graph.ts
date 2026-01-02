@@ -41,7 +41,6 @@ import {
 } from './nodes'
 
 const DB_URI = process.env.LANGGRAPH_PERSISTENCE as string
-console.log('🚀 ~ DB_URI:', DB_URI)
 const checkpointer = PostgresSaver.fromConnString(DB_URI)
 
 /**
@@ -155,10 +154,6 @@ function decideToGenerate(
  * Build the Land Law Agentic Workflow Graph
  */
 export async function buildLandLawGraph() {
-  // Setup checkpointer (only needs to be called once)
-  await checkpointer.setup()
-  console.log('✅ PostgresSaver checkpointer initialized')
-
   const workflow = new StateGraph(AgentState, {
     input: InputStateAnnotation,
     context: LandLawAgentConfigurationSchema,
