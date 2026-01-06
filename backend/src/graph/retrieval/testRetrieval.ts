@@ -25,16 +25,8 @@ async function testRetrieval(): Promise<void> {
   try {
     console.log('🚀 Testing Retrieval System...\n')
 
-    const WEAVIATE_URL = process.env.WEAVIATE_URL
-    const WEAVIATE_GRPC_URL = process.env.WEAVIATE_GRPC_URL
-    const WEAVIATE_API_KEY = process.env.WEAVIATE_API_KEY
-
     console.log('📦 Initializing Weaviate client...')
-    const client = await getWeaviateClient(
-      WEAVIATE_URL,
-      WEAVIATE_GRPC_URL,
-      WEAVIATE_API_KEY,
-    )
+    const client = await getWeaviateClient()
 
     console.log('🔤 Loading embeddings model...')
     const embeddings = getEmbeddingsModel(

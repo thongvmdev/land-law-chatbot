@@ -18,7 +18,8 @@
         "clean": "rm -rf dist",
         "clear-index": "tsx scripts/clearIndex.ts",
         "run-graph": "tsx src/runGraph.ts",
-        "test-retrieval": "tsx src/graph/retrieval/testRetrieval.ts"
+        "test-retrieval": "tsx src/graph/retrieval/testRetrieval.ts",
+        "test-connections": "tsx test-connections.ts"
     },
     "keywords": [
         "langchain",

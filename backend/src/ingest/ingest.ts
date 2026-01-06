@@ -182,11 +182,7 @@ export async function ingestDocs(): Promise<void> {
   }
 
   // Initialize Weaviate client
-  const weaviateClient = await getWeaviateClient(
-    WEAVIATE_URL,
-    WEAVIATE_GRPC_URL,
-    WEAVIATE_API_KEY,
-  )
+  const weaviateClient = await getWeaviateClient()
 
   let recordManager: PostgresRecordManager | undefined
 

@@ -1,0 +1,173 @@
+version: "3.8"
+
+services:
+  # PostgreSQL Database Service
+  postgres:
+    image: postgres:16-alpine
+    container_name: land_law_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-langgraph_persistence}
+      TZ: UTC
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - langgraph-network
+    # NO port exposure - internal access only for security
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Weaviate Vector Database Service
+  weaviate:
+    image: cr.weaviate.io/semitechnologies/weaviate:1.33.2
+    container_name: land_law_weaviate
+    restart: unless-stopped
+    environment:
+      QUERY_DEFAULTS_LIMIT: 20
+      PERSISTENCE_DATA_PATH: "/var/lib/weaviate"
+      DEFAULT_VECTORIZER_MODULE: none
+      ENABLE_MODULES: ""
+      CLUSTER_HOSTNAME: "node1"
+      AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: "false"
+      AUTHENTICATION_APIKEY_ENABLED: "true"
+      AUTHORIZATION_ENABLE_RBAC: "true"
+      AUTHORIZATION_RBAC_ROOT_USERS: "admin-user"
+      AUTHENTICATION_APIKEY_ALLOWED_KEYS: ${WEAVIATE_API_KEY}
+    volumes:
+      - weaviate_data:/var/lib/weaviate
+    networks:
+      - langgraph-network
+    # NO port exposure - internal access only for security
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--no-verbose",
+          "--tries=1",
+          "--spider",
+          "http://localhost:8080/v1/.well-known/ready",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache Service
+  langgraph-redis:
+    image: redis:6-alpine
+    container_name: land_law_redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
+    volumes:
+      - redis_data:/data
+    networks:
+      - langgraph-network
+    # NO port exposure - internal access only for security
+    healthcheck:
+      test: ["CMD", "redis-cli", "--pass", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # LangGraph API Service
+  langgraph-api:
+    # Use pre-built image from registry for production
+    image: ${DOCKER_REGISTRY:-your-registry}/langgraph-api:${VERSION:-latest}
+    container_name: land_law_api
+    restart: unless-stopped
+    ports:
+      - "8123:8000" # Only expose the API endpoint
+    environment:
+      # Database connection - pointing to local postgres service
+      - POSTGRES_URI=${POSTGRES_URI}
+      - LANGGRAPH_PERSISTENCE=${LANGGRAPH_PERSISTENCE}
+      - DATABASE_URL=${DATABASE_URL}
+
+      # Redis connection - pointing to local redis service
+      - REDIS_URI=${REDIS_URI}
+
+      # Weaviate Configuration - pointing to local weaviate service
+      - WEAVIATE_URL=${WEAVIATE_URL}
+      - WEAVIATE_GRPC_URL=${WEAVIATE_GRPC_URL}
+      - WEAVIATE_API_KEY=${WEAVIATE_API_KEY}
+
+      # LangSmith (optional, for tracing/monitoring)
+      - LANGSMITH_API_KEY=${LANGSMITH_API_KEY:-}
+      - LANGCHAIN_API_KEY=${LANGCHAIN_API_KEY:-}
+      - LANGCHAIN_TRACING_V2=${LANGCHAIN_TRACING_V2:-false}
+      - LANGCHAIN_PROJECT=${LANGCHAIN_PROJECT:-land-law-chatbot}
+      - LANGCHAIN_PROMPT_API_KEY=${LANGCHAIN_PROMPT_API_KEY:-}
+      - LANGCHAIN_PROMPT_API_URL=${LANGCHAIN_PROMPT_API_URL:-}
+
+      # API Keys
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - CLOUDFLARE_ACCOUNT_ID=${CLOUDFLARE_ACCOUNT_ID}
+      - CLOUDFLARE_API_TOKEN=${CLOUDFLARE_API_TOKEN}
+      - OLLAMA_API_KEY=${OLLAMA_API_KEY:-}
+
+      # Model Configuration
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-cloudflare/qwen3-embedding-0.6b}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://localhost:11434}
+
+      # Other
+      - NODE_ENV=production
+      - PORT=${PORT:-3001}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      weaviate:
+        condition: service_healthy
+      langgraph-redis:
+        condition: service_healthy
+    networks:
+      - langgraph-network
+    # Resource limits for production
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 4G
+        reservations:
+          cpus: "0.5"
+          memory: 1G
+
+  # Optional: Nginx reverse proxy for SSL/TLS termination
+  nginx:
+    image: nginx:alpine
+    container_name: land_law_nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+      - nginx_logs:/var/log/nginx
+    depends_on:
+      - langgraph-api
+    networks:
+      - langgraph-network
+    # Uncomment the nginx service only if you want SSL/TLS termination
+    # Otherwise, expose the langgraph-api directly
+
+networks:
+  langgraph-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+    driver: local
+  weaviate_data:
+    driver: local
+  redis_data:
+    driver: local
+  nginx_logs:
+    driver: local
