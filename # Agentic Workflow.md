@@ -83,7 +83,6 @@
 [] Function Calling / Tool Use Model
 [] Ctx Engineering: Shor term & Long term Memories & `Messages histories mgmt > Critical, when integrate with FE`
 [] Learning Skills with Deepagents > ref youtube Channel & X
-[] Blog: https://blog.langchain.com/how-agents-can-use-filesystems-for-context-engineering/
 [] Deep Agent on LC Udemy Course
 
 ===

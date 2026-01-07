@@ -19,7 +19,7 @@ import {
   ThreadPrimitive,
 } from "@assistant-ui/react";
 
-import type { FC } from "react";
+import { useEffect, useState, type FC } from "react";
 import { LazyMotion, MotionConfig, domAnimation } from "motion/react";
 import * as m from "motion/react-m";
 
@@ -32,6 +32,7 @@ import {
   ComposerAttachments,
   UserMessageAttachments,
 } from "@/components/assistant-ui/attachment";
+import { getRandomQuestions } from "@/lib/lawQuestions";
 
 import { cn } from "@/lib/utils";
 
@@ -95,7 +96,7 @@ const ThreadWelcome: FC = () => {
             exit={{ opacity: 0, y: 10 }}
             className="aui-thread-welcome-message-motion-1 text-2xl font-semibold"
           >
-            Hello there!
+            Xin chào bạn!
           </m.div>
           <m.div
             initial={{ opacity: 0, y: 10 }}
@@ -104,7 +105,7 @@ const ThreadWelcome: FC = () => {
             transition={{ delay: 0.1 }}
             className="aui-thread-welcome-message-motion-2 text-2xl text-muted-foreground/65"
           >
-            How can I help you today?
+            Hỏi tôi về Luật Đất đai 2024
           </m.div>
         </div>
       </div>
@@ -114,58 +115,44 @@ const ThreadWelcome: FC = () => {
 };
 
 const ThreadSuggestions: FC = () => {
+  const [suggestedQuestions, setSuggestedQuestions] = useState<string[]>([]);
+
+  useEffect(() => {
+    // Only run on client to avoid hydration mismatch
+    setSuggestedQuestions(getRandomQuestions(4));
+  }, []);
+
+  // Show empty state during SSR to match initial render
+  if (suggestedQuestions.length === 0) {
+    return null;
+  }
+
   return (
     <div className="aui-thread-welcome-suggestions grid w-full gap-2 pb-4 @md:grid-cols-2">
-      {[
-        {
-          title: "What's the weather",
-          label: "in San Francisco?",
-          action: "What's the weather in San Francisco?",
-        },
-        {
-          title: "Explain React hooks",
-          label: "like useState and useEffect",
-          action: "Explain React hooks like useState and useEffect",
-        },
-        {
-          title: "Write a SQL query",
-          label: "to find top customers",
-          action: "Write a SQL query to find top customers",
-        },
-        {
-          title: "Create a meal plan",
-          label: "for healthy weight loss",
-          action: "Create a meal plan for healthy weight loss",
-        },
-      ].map((suggestedAction, index) => (
-        <m.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: 20 }}
-          transition={{ delay: 0.05 * index }}
-          key={`suggested-action-${suggestedAction.title}-${index}`}
-          className="aui-thread-welcome-suggestion-display [&:nth-child(n+3)]:hidden @md:[&:nth-child(n+3)]:block"
-        >
-          <ThreadPrimitive.Suggestion
-            prompt={suggestedAction.action}
-            send
-            asChild
+      {suggestedQuestions.map((question, index) => {
+        return (
+          <m.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 20 }}
+            transition={{ delay: 0.05 * index }}
+            key={`suggested-question-${index}-${question.slice(0, 20)}`}
+            className="aui-thread-welcome-suggestion-display [&:nth-child(n+3)]:hidden @md:[&:nth-child(n+3)]:block"
           >
-            <Button
-              variant="ghost"
-              className="aui-thread-welcome-suggestion h-auto w-full flex-1 flex-wrap items-start justify-start gap-1 rounded-3xl border px-5 py-4 text-left text-sm @md:flex-col dark:hover:bg-accent/60"
-              aria-label={suggestedAction.action}
-            >
-              <span className="aui-thread-welcome-suggestion-text-1 font-medium">
-                {suggestedAction.title}
-              </span>
-              <span className="aui-thread-welcome-suggestion-text-2 text-muted-foreground">
-                {suggestedAction.label}
-              </span>
-            </Button>
-          </ThreadPrimitive.Suggestion>
-        </m.div>
-      ))}
+            <ThreadPrimitive.Suggestion prompt={question} send asChild>
+              <Button
+                variant="ghost"
+                className="aui-thread-welcome-suggestion h-auto w-full items-start justify-start rounded-3xl border px-5 py-4 text-left text-sm dark:hover:bg-accent/60"
+                aria-label={question}
+              >
+                <span className="aui-thread-welcome-suggestion-text-1 leading-relaxed font-medium break-words whitespace-normal">
+                  {question}
+                </span>
+              </Button>
+            </ThreadPrimitive.Suggestion>
+          </m.div>
+        );
+      })}
     </div>
   );
 };

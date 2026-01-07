@@ -10,8 +10,9 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { TooltipContentProps } from "@radix-ui/react-tooltip";
-import { MenuIcon, PanelLeftIcon, ShareIcon } from "lucide-react";
+import { MenuIcon, PanelLeftIcon, ShareIcon, BookOpenIcon } from "lucide-react";
 import { ComponentPropsWithRef, useState, type FC } from "react";
+import { LawStructureModal } from "@/components/law-structure-modal";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import {
   Tooltip,
@@ -101,7 +102,8 @@ const MobileSidebar: FC = () => {
 const Header: FC<{
   sidebarCollapsed: boolean;
   onToggleSidebar: () => void;
-}> = ({ sidebarCollapsed, onToggleSidebar }) => {
+  onOpenStructure: () => void;
+}> = ({ sidebarCollapsed, onToggleSidebar, onOpenStructure }) => {
   return (
     <header className="flex h-14 shrink-0 items-center gap-2 px-4">
       <MobileSidebar />
@@ -116,6 +118,16 @@ const Header: FC<{
         <PanelLeftIcon className="size-4" />
       </ButtonWithTooltip>
       <ModelPicker />
+      <ButtonWithTooltip
+        variant="ghost"
+        size="icon"
+        tooltip="Cấu trúc Luật Đất đai 2024"
+        side="bottom"
+        onClick={onOpenStructure}
+        className="size-9"
+      >
+        <BookOpenIcon className="size-4" />
+      </ButtonWithTooltip>
       <div className="ml-auto flex items-center gap-2">
         <ThemeToggle />
         <ButtonWithTooltip
@@ -134,6 +146,7 @@ const Header: FC<{
 
 export function Assistant() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [structureModalOpen, setStructureModalOpen] = useState(false);
 
   const runtime = useLangGraphRuntime({
     stream: async function* (messages, { initialize, command }) {
@@ -188,12 +201,17 @@ export function Assistant() {
           <Header
             sidebarCollapsed={sidebarCollapsed}
             onToggleSidebar={() => setSidebarCollapsed(!sidebarCollapsed)}
+            onOpenStructure={() => setStructureModalOpen(true)}
           />
           <main className="flex-1 overflow-hidden">
             <Thread />
           </main>
         </div>
       </div>
+      <LawStructureModal
+        open={structureModalOpen}
+        onOpenChange={setStructureModalOpen}
+      />
     </AssistantRuntimeProvider>
   );
 }
