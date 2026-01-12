@@ -31,8 +31,8 @@ import {
   type LawChapter,
   type LawSection,
   type LawArticle,
-} from "@/lib/lawStructure";
-import { cn } from "@/lib/utils";
+} from "@/utils/lawStructure";
+import { cn } from "@/utils";
 
 type LawStructureModalProps = {
   open: boolean;

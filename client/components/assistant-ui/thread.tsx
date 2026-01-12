@@ -32,9 +32,9 @@ import {
   ComposerAttachments,
   UserMessageAttachments,
 } from "@/components/assistant-ui/attachment";
-import { getRandomQuestions } from "@/lib/lawQuestions";
+import { getRandomQuestions } from "@/utils";
 
-import { cn } from "@/lib/utils";
+import { cn } from "@/utils";
 
 export const Thread: FC = () => {
   return (

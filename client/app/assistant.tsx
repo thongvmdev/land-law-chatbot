@@ -3,12 +3,12 @@
 import { AssistantRuntimeProvider } from "@assistant-ui/react";
 import { useLangGraphRuntime } from "@assistant-ui/react-langgraph";
 
-import { createThread, getThreadState, sendMessage } from "@/lib/chatApi";
+import { createThread, getThreadState, sendMessage } from "@/utils/chatApi";
 import { Thread } from "@/components/assistant-ui/thread";
 import { ModelPicker } from "@/components/assistant-ui/model-picker";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { cn } from "@/utils";
 import type { TooltipContentProps } from "@radix-ui/react-tooltip";
 import {
   MenuIcon,
@@ -16,11 +16,31 @@ import {
   ShareIcon,
   BookOpenIcon,
   FileTextIcon,
+  Scale,
+  Landmark,
 } from "lucide-react";
 import { ComponentPropsWithRef, useState, type FC } from "react";
-import { LawStructureModal } from "@/components/law-structure-modal";
-import { PdfViewer } from "@/components/pdf-viewer";
+import dynamic from "next/dynamic";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+
+const LawStructureModal = dynamic(
+  () =>
+    import("@/components/law-structure-modal").then(
+      (mod) => mod.LawStructureModal,
+    ),
+  {
+    loading: () => <div className="sr-only">Loading structure modal...</div>,
+    ssr: false,
+  },
+);
+
+const PdfViewer = dynamic(
+  () => import("@/components/pdf-viewer").then((mod) => mod.PdfViewer),
+  {
+    loading: () => <div className="sr-only">Loading PDF viewer...</div>,
+    ssr: false,
+  },
+);
 import {
   Tooltip,
   TooltipContent,
@@ -55,10 +75,20 @@ const ButtonWithTooltip: FC<ButtonWithTooltipProps> = ({
 const Logo: FC = () => {
   return (
     <div className="flex items-center gap-2 px-2 text-sm font-medium">
-      <div className="flex size-5 items-center justify-center rounded bg-primary text-xs font-bold text-primary-foreground">
-        L
+      <div className="relative flex size-8 items-center justify-center rounded-lg bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-800 shadow-md">
+        <Scale className="size-4 text-white" strokeWidth={2.5} />
+        <div className="absolute -right-0.5 -bottom-0.5 flex size-3 items-center justify-center rounded-sm bg-gradient-to-br from-emerald-500 to-emerald-600">
+          <Landmark className="size-2 text-white" strokeWidth={3} />
+        </div>
       </div>
-      <span className="text-foreground/90">Land Law Assistant</span>
+      <div className="flex flex-col">
+        <span className="text-sm leading-tight font-semibold text-foreground">
+          Land Law
+        </span>
+        <span className="text-xs leading-tight text-muted-foreground">
+          Assistant
+        </span>
+      </div>
     </div>
   );
 };
@@ -204,9 +234,10 @@ export function Assistant() {
     load: async (externalId) => {
       console.log("📂 Loading thread:", externalId);
       const state = await getThreadState(externalId);
+      const values = state.values as Record<string, any>;
 
       return {
-        messages: state.values.messages,
+        messages: values?.messages || [],
       };
     },
   });
@@ -229,11 +260,15 @@ export function Assistant() {
           </main>
         </div>
       </div>
-      <LawStructureModal
-        open={structureModalOpen}
-        onOpenChange={setStructureModalOpen}
-      />
-      <PdfViewer open={pdfViewerOpen} onOpenChange={setPdfViewerOpen} />
+      {structureModalOpen && (
+        <LawStructureModal
+          open={structureModalOpen}
+          onOpenChange={setStructureModalOpen}
+        />
+      )}
+      {pdfViewerOpen && (
+        <PdfViewer open={pdfViewerOpen} onOpenChange={setPdfViewerOpen} />
+      )}
     </AssistantRuntimeProvider>
   );
 }

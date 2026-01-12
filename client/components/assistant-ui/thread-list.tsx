@@ -9,7 +9,7 @@ import {
   prettifyDateLabel,
   type ThreadItem,
 } from "./thread-list-utils";
-import { listThreads, deleteThread } from "@/lib/chatApi";
+import { listThreads, deleteThread } from "@/utils/chatApi";
 
 export const ThreadList: FC = () => {
   const [refreshKey, setRefreshKey] = useState(0);
@@ -52,6 +52,7 @@ const GroupedThreadListItems: FC<{ initialSelectedId?: string | null }> = ({
 }) => {
   const api = useAssistantApi();
   const [threads, setThreads] = useState<ThreadItem[]>([]);
+  console.log("🚀 ~ GroupedThreadListItems ~ threads:", threads);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(
     initialSelectedId || null,
@@ -81,6 +82,7 @@ const GroupedThreadListItems: FC<{ initialSelectedId?: string | null }> = ({
   }, []);
 
   const handleThreadClick = async (threadId: string) => {
+    console.log("🚀 ~ handleThreadClick ~ threadId:", threadId);
     try {
       setSelectedThreadId(threadId);
       // Switch to the selected thread using api
