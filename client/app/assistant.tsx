@@ -19,9 +19,11 @@ import {
   Scale,
   Landmark,
 } from "lucide-react";
-import { ComponentPropsWithRef, useState, type FC } from "react";
+import { ComponentPropsWithRef, useState, useEffect, type FC } from "react";
 import dynamic from "next/dynamic";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { useQueryState } from "nuqs";
+import { useUser } from "@/hooks/useUser";
 
 const LawStructureModal = dynamic(
   () =>
@@ -198,6 +200,12 @@ export function Assistant() {
   const [structureModalOpen, setStructureModalOpen] = useState(false);
   const [pdfViewerOpen, setPdfViewerOpen] = useState(false);
 
+  // Add user management
+  const { userId } = useUser();
+
+  // Add URL-based thread ID
+  const [threadId, setThreadId] = useQueryState("threadId");
+
   const runtime = useLangGraphRuntime({
     stream: async function* (messages, { initialize, command }) {
       // Get or create thread
@@ -209,8 +217,8 @@ export function Assistant() {
           "🆕 No thread selected, creating new thread for first message...",
         );
 
-        // Create thread without metadata - title will be extracted from first message later
-        const { thread_id } = await createThread();
+        // Create thread with user metadata
+        const { thread_id } = await createThread(userId);
         externalId = thread_id;
         isNewThread = true;
         console.log("✅ Auto-created thread:", externalId);
@@ -227,8 +235,13 @@ export function Assistant() {
       yield* generator;
     },
     create: async () => {
-      const { thread_id } = await createThread();
+      // Create new thread with user metadata
+      const { thread_id } = await createThread(userId);
       console.log("🎯 User manually created new thread:", thread_id);
+
+      // Update URL
+      setThreadId(thread_id);
+
       return { externalId: thread_id };
     },
     load: async (externalId) => {
@@ -241,6 +254,14 @@ export function Assistant() {
       };
     },
   });
+
+  // Monitor threadId changes from URL
+  useEffect(() => {
+    if (!threadId) return;
+
+    // The runtime will automatically call 'load' when we switch threads
+    console.log("🔄 Thread ID changed in URL:", threadId);
+  }, [threadId]);
 
   return (
     <AssistantRuntimeProvider runtime={runtime}>

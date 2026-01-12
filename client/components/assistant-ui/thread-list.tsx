@@ -10,6 +10,8 @@ import {
   type ThreadItem,
 } from "./thread-list-utils";
 import { listThreads, deleteThread } from "@/utils/chatApi";
+import { useQueryState } from "nuqs";
+import { useUser } from "@/hooks/useUser";
 
 export const ThreadList: FC = () => {
   const [refreshKey, setRefreshKey] = useState(0);
@@ -51,6 +53,8 @@ const GroupedThreadListItems: FC<{ initialSelectedId?: string | null }> = ({
   initialSelectedId,
 }) => {
   const api = useAssistantApi();
+  const { userId } = useUser(); // Get current user
+  const [threadId, setThreadId] = useQueryState("threadId"); // URL state
   const [threads, setThreads] = useState<ThreadItem[]>([]);
   console.log("🚀 ~ GroupedThreadListItems ~ threads:", threads);
   const [isLoading, setIsLoading] = useState(true);
@@ -65,10 +69,14 @@ const GroupedThreadListItems: FC<{ initialSelectedId?: string | null }> = ({
     }
   }, [initialSelectedId]);
 
+  // Fetch user-specific threads
   const fetchThreadsData = async () => {
+    if (!userId) return; // Wait for userId to be available
+
     try {
       setIsLoading(true);
-      const fetchedThreads = await listThreads();
+      // Fetch only this user's threads
+      const fetchedThreads = await listThreads(userId);
       setThreads(fetchedThreads);
     } catch (error) {
       console.error("Failed to fetch threads:", error);
@@ -79,17 +87,15 @@ const GroupedThreadListItems: FC<{ initialSelectedId?: string | null }> = ({
 
   useEffect(() => {
     fetchThreadsData();
-  }, []);
+  }, [userId]); // Re-fetch when userId changes
 
-  const handleThreadClick = async (threadId: string) => {
-    console.log("🚀 ~ handleThreadClick ~ threadId:", threadId);
-    try {
-      setSelectedThreadId(threadId);
-      // Switch to the selected thread using api
-      api.threads().switchToThread(threadId);
-    } catch (error) {
-      console.error("Failed to switch thread:", error);
-    }
+  // SIMPLIFIED: Just update URL, runtime handles the rest
+  const handleThreadClick = async (clickedThreadId: string) => {
+    console.log("🚀 ~ handleThreadClick ~ threadId:", clickedThreadId);
+    setSelectedThreadId(clickedThreadId);
+
+    // Simply update the URL - the runtime's 'load' function will be called automatically
+    setThreadId(clickedThreadId);
   };
 
   const handleArchiveThread = async (e: React.MouseEvent, threadId: string) => {
@@ -98,9 +104,11 @@ const GroupedThreadListItems: FC<{ initialSelectedId?: string | null }> = ({
       await deleteThread(threadId);
       // Refresh thread list after deletion
       await fetchThreadsData();
+
       // If the deleted thread was selected, clear selection
       if (selectedThreadId === threadId) {
         setSelectedThreadId(null);
+        setThreadId(null); // Clear URL
       }
     } catch (error) {
       console.error("Failed to delete thread:", error);
@@ -155,13 +163,16 @@ const ThreadListNew: FC<{ onNewThread: (threadId?: string) => void }> = ({
   onNewThread,
 }) => {
   const api = useAssistantApi();
+  const [, setThreadId] = useQueryState("threadId");
 
   const handleNewThreadClick = async () => {
     try {
+      // Clear URL threadId - this starts a fresh thread
+      setThreadId(null);
+
       // Create a new thread using api
       api.threads().switchToNewThread();
 
-      // Get the new thread ID and pass it back
       // Trigger refresh of thread list after a short delay to allow backend to process
       setTimeout(() => {
         onNewThread();
@@ -185,9 +196,13 @@ const ThreadListNew: FC<{ onNewThread: (threadId?: string) => void }> = ({
 
 const DeleteAllThreads: FC<{ onDeleted: () => void }> = ({ onDeleted }) => {
   const api = useAssistantApi();
+  const { userId } = useUser();
+  const [, setThreadId] = useQueryState("threadId");
   const [isDeleting, setIsDeleting] = useState(false);
 
   const handleDeleteAll = async () => {
+    if (!userId) return;
+
     const confirmDelete = window.confirm(
       "Are you sure you want to delete all threads? This action cannot be undone.",
     );
@@ -196,13 +211,16 @@ const DeleteAllThreads: FC<{ onDeleted: () => void }> = ({ onDeleted }) => {
 
     try {
       setIsDeleting(true);
-      // Fetch all threads
-      const threads = await listThreads();
+      // Fetch only this user's threads
+      const threads = await listThreads(userId);
 
       // Delete each thread
       await Promise.all(
         threads.map((thread) => deleteThread(thread.thread_id)),
       );
+
+      // Clear URL
+      setThreadId(null);
 
       // Create a new thread after deleting all
       api.threads().switchToNewThread();

@@ -38,11 +38,12 @@ const convertThreadToThreadItem = (thread: Thread): ThreadItem => {
 
 /**
  * Creates a new thread
- * @param metadata Optional metadata to attach to the thread
+ * @param userId Optional user ID to attach to the thread
  * @returns Promise with the created thread
  */
-export const createThread = async (metadata?: Record<string, any>) => {
+export const createThread = async (userId?: string) => {
   const client = createClient();
+  const metadata = userId ? { user_id: userId } : undefined;
   return await client.threads.create({ metadata });
 };
 
@@ -91,16 +92,17 @@ export const sendMessage = async ({
 };
 
 /**
- * Lists all threads, optionally filtered by metadata
- * @param metadata Optional metadata to filter threads
+ * Lists all threads, optionally filtered by user ID
+ * @param userId Optional user ID to filter threads
  * @param limit Maximum number of threads to return (default: 100)
  * @returns Promise with array of thread items
  */
 export const listThreads = async (
-  metadata?: Record<string, any>,
+  userId?: string,
   limit: number = 100,
 ): Promise<ThreadItem[]> => {
   const client = createClient();
+  const metadata = userId ? { user_id: userId } : undefined;
   const threads = (await client.threads.search({
     metadata,
     limit,
