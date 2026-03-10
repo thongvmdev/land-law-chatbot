@@ -1,0 +1,58 @@
+%%{init: {'flowchart': {'curve': 'linear'}}}%%
+graph TD;
+	__start__([<p>__start__</p>]):::first
+	check_relevance(check_relevance)
+	reject_question(reject_question)
+	route_query(route_query)
+	decompose_query(decompose_query)
+	retrieve_documents(retrieve_documents)
+	grade_documents(grade_documents)
+	transform_query(transform_query)
+	generate(generate)
+	no_answer(no_answer)
+	__end__([<p>__end__</p>]):::last
+	__start__ --> check_relevance;
+	generate --> __end__;
+	no_answer --> __end__;
+	reject_question --> __end__;
+	retrieve_documents --> grade_documents;
+	transform_query --> check_relevance;
+	check_relevance -.-> reject_question;
+	check_relevance -.-> route_query;
+	check_relevance -.-> decompose_query;
+	check_relevance -.-> retrieve_documents;
+	check_relevance -.-> grade_documents;
+	check_relevance -.-> transform_query;
+	check_relevance -.-> generate;
+	check_relevance -.-> no_answer;
+	check_relevance -.-> __end__;
+	route_query -.-> check_relevance;
+	route_query -.-> reject_question;
+	route_query -.-> decompose_query;
+	route_query -.-> retrieve_documents;
+	route_query -.-> grade_documents;
+	route_query -.-> transform_query;
+	route_query -.-> generate;
+	route_query -.-> no_answer;
+	route_query -.-> __end__;
+	decompose_query -.-> check_relevance;
+	decompose_query -.-> reject_question;
+	decompose_query -.-> route_query;
+	decompose_query -.-> retrieve_documents;
+	decompose_query -.-> grade_documents;
+	decompose_query -.-> transform_query;
+	decompose_query -.-> generate;
+	decompose_query -.-> no_answer;
+	decompose_query -.-> __end__;
+	grade_documents -.-> check_relevance;
+	grade_documents -.-> reject_question;
+	grade_documents -.-> route_query;
+	grade_documents -.-> decompose_query;
+	grade_documents -.-> retrieve_documents;
+	grade_documents -.-> transform_query;
+	grade_documents -.-> generate;
+	grade_documents -.-> no_answer;
+	grade_documents -.-> __end__;
+	classDef default fill:#f2f0ff,line-height:1.2;
+	classDef first fill-opacity:0;
+	classDef last fill:#bfb6fc;

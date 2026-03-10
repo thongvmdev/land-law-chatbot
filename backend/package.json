@@ -18,6 +18,7 @@
         "clean": "rm -rf dist",
         "clear-index": "tsx scripts/clearIndex.ts",
         "run-graph": "tsx src/runGraph.ts",
+        "export-graph": "tsx scripts/exportMermaid.ts",
         "test-retrieval": "tsx src/graph/retrieval/testRetrieval.ts",
         "test-connections": "tsx test-connections.ts"
     },

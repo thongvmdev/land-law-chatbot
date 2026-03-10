@@ -235,7 +235,7 @@ export const LandLawAgentConfigurationSchema = BaseConfigurationSchema.extend({
     .number()
     .min(5000)
     .max(50000)
-    .default(10000)
+    .default(20000)
     .describe('Token threshold for large documents'),
 
   /**
