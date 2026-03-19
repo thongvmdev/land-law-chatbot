@@ -18,7 +18,7 @@ export const BaseConfigurationSchema = z.object({
    */
   embeddingModel: z
     .string()
-    .default('ollama/qwen3-embedding:0.6b')
+    .default('cloudflare/qwen3-embedding:0.6b')
     .describe('Name of the embedding model to use'),
 
   embeddingQueryUserModel: z

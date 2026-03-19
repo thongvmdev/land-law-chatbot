@@ -164,6 +164,7 @@ export async function createRecordManager(): Promise<PostgresRecordManager> {
   // Remove sslmode from connection string as pg client doesn't parse it properly
   // and explicitly set ssl to false since the server doesn't support SSL
   const dbUrl = RECORD_MANAGER_DB_URL?.split('?')[0] || RECORD_MANAGER_DB_URL
+  console.log('🚀 ~ createRecordManager ~ dbUrl:', dbUrl)
 
   const recordManager = new PostgresRecordManager(
     `weaviate/${WEAVIATE_GENERAL_LAND_LAW_VN}`,

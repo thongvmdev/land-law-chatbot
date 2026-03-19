@@ -1,0 +1,111 @@
+version: "3.8"
+
+services:
+  # PostgreSQL Database Service
+  postgres:
+    image: postgres:16-alpine
+    container_name: land_law_postgres
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      TZ: UTC
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db.sh:/docker-entrypoint-initdb.d/init-db.sh:ro
+    ports:
+      - "5432:5432"
+    networks:
+      - langgraph-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Weaviate Vector Database Service
+  weaviate:
+    image: cr.weaviate.io/semitechnologies/weaviate:1.33.2
+    container_name: land_law_weaviate
+    restart: unless-stopped
+    environment:
+      QUERY_DEFAULTS_LIMIT: 20
+      PERSISTENCE_DATA_PATH: "/var/lib/weaviate"
+      DEFAULT_VECTORIZER_MODULE: none
+      ENABLE_MODULES: ""
+      CLUSTER_HOSTNAME: "node1"
+      AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: "false"
+      AUTHENTICATION_APIKEY_ENABLED: "true"
+      AUTHENTICATION_APIKEY_ALLOWED_KEYS: ${WEAVIATE_API_KEY}
+      AUTHENTICATION_APIKEY_USERS: "admin-user"
+    volumes:
+      - weaviate_data:/var/lib/weaviate
+    ports:
+      - "8080:8080" # HTTP API
+      - "50051:50051" # gRPC
+    networks:
+      - langgraph-network
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--no-verbose",
+          "--tries=1",
+          "--spider",
+          "http://localhost:8080/v1/.well-known/ready",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache Service
+  langgraph-redis:
+    image: redis:6-alpine
+    container_name: land_law_redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
+    env_file:
+      - .env
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - langgraph-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "--pass", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # LangGraph API Service
+  langgraph-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: land_law_api
+    restart: unless-stopped
+    ports:
+      - "8123:8000" # Expose on 8123 (host) -> 8000 (container)
+    env_file:
+      - .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      weaviate:
+        condition: service_healthy
+      langgraph-redis:
+        condition: service_healthy
+    networks:
+      - langgraph-network
+
+networks:
+  langgraph-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  weaviate_data:
+  redis_data:

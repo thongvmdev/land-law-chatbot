@@ -3,16 +3,46 @@
 import { AssistantRuntimeProvider } from "@assistant-ui/react";
 import { useLangGraphRuntime } from "@assistant-ui/react-langgraph";
 
-import { createThread, getThreadState, sendMessage } from "@/lib/chatApi";
+import { createThread, getThreadState, sendMessage } from "@/utils/chatApi";
 import { Thread } from "@/components/assistant-ui/thread";
 import { ModelPicker } from "@/components/assistant-ui/model-picker";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { cn } from "@/utils";
 import type { TooltipContentProps } from "@radix-ui/react-tooltip";
-import { MenuIcon, PanelLeftIcon, ShareIcon } from "lucide-react";
-import { ComponentPropsWithRef, useState, type FC } from "react";
+import {
+  MenuIcon,
+  PanelLeftIcon,
+  ShareIcon,
+  BookOpenIcon,
+  FileTextIcon,
+  Scale,
+  Landmark,
+} from "lucide-react";
+import { ComponentPropsWithRef, useState, useEffect, type FC } from "react";
+import dynamic from "next/dynamic";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { useQueryState } from "nuqs";
+import { useUser } from "@/hooks/useUser";
+
+const LawStructureModal = dynamic(
+  () =>
+    import("@/components/law-structure-modal").then(
+      (mod) => mod.LawStructureModal,
+    ),
+  {
+    loading: () => <div className="sr-only">Loading structure modal...</div>,
+    ssr: false,
+  },
+);
+
+const PdfViewer = dynamic(
+  () => import("@/components/pdf-viewer").then((mod) => mod.PdfViewer),
+  {
+    loading: () => <div className="sr-only">Loading PDF viewer...</div>,
+    ssr: false,
+  },
+);
 import {
   Tooltip,
   TooltipContent,
@@ -47,10 +77,20 @@ const ButtonWithTooltip: FC<ButtonWithTooltipProps> = ({
 const Logo: FC = () => {
   return (
     <div className="flex items-center gap-2 px-2 text-sm font-medium">
-      <div className="flex size-5 items-center justify-center rounded bg-primary text-xs font-bold text-primary-foreground">
-        L
+      <div className="relative flex size-8 items-center justify-center rounded-lg bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-800 shadow-md">
+        <Scale className="size-4 text-white" strokeWidth={2.5} />
+        <div className="absolute -right-0.5 -bottom-0.5 flex size-3 items-center justify-center rounded-sm bg-gradient-to-br from-emerald-500 to-emerald-600">
+          <Landmark className="size-2 text-white" strokeWidth={3} />
+        </div>
       </div>
-      <span className="text-foreground/90">Land Law Assistant</span>
+      <div className="flex flex-col">
+        <span className="text-sm leading-tight font-semibold text-foreground">
+          Land Law
+        </span>
+        <span className="text-xs leading-tight text-muted-foreground">
+          Assistant
+        </span>
+      </div>
     </div>
   );
 };
@@ -101,7 +141,9 @@ const MobileSidebar: FC = () => {
 const Header: FC<{
   sidebarCollapsed: boolean;
   onToggleSidebar: () => void;
-}> = ({ sidebarCollapsed, onToggleSidebar }) => {
+  onOpenStructure: () => void;
+  onOpenPdf: () => void;
+}> = ({ sidebarCollapsed, onToggleSidebar, onOpenStructure, onOpenPdf }) => {
   return (
     <header className="flex h-14 shrink-0 items-center gap-2 px-4">
       <MobileSidebar />
@@ -115,7 +157,28 @@ const Header: FC<{
       >
         <PanelLeftIcon className="size-4" />
       </ButtonWithTooltip>
-      <ModelPicker />
+      {/* <ModelPicker /> */}
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={onOpenStructure}
+        className="gap-2"
+      >
+        <BookOpenIcon className="size-4" />
+        <span className="hidden sm:inline">Cấu trúc Luật</span>
+      </Button>
+      {/*  */}
+      <ButtonWithTooltip
+        variant="ghost"
+        size="sm"
+        onClick={onOpenPdf}
+        tooltip="Xem văn bản PDF"
+        side="bottom"
+        className="gap-2"
+      >
+        <FileTextIcon className="size-4" />
+        <span className="hidden sm:inline">Văn bản gốc</span>
+      </ButtonWithTooltip>
       <div className="ml-auto flex items-center gap-2">
         <ThemeToggle />
         <ButtonWithTooltip
@@ -134,6 +197,14 @@ const Header: FC<{
 
 export function Assistant() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [structureModalOpen, setStructureModalOpen] = useState(false);
+  const [pdfViewerOpen, setPdfViewerOpen] = useState(false);
+
+  // Add user management
+  const { userId } = useUser();
+
+  // Add URL-based thread ID
+  const [threadId, setThreadId] = useQueryState("threadId");
 
   const runtime = useLangGraphRuntime({
     stream: async function* (messages, { initialize, command }) {
@@ -146,8 +217,8 @@ export function Assistant() {
           "🆕 No thread selected, creating new thread for first message...",
         );
 
-        // Create thread without metadata - title will be extracted from first message later
-        const { thread_id } = await createThread();
+        // Create thread with user metadata
+        const { thread_id } = await createThread(userId);
         externalId = thread_id;
         isNewThread = true;
         console.log("✅ Auto-created thread:", externalId);
@@ -164,19 +235,33 @@ export function Assistant() {
       yield* generator;
     },
     create: async () => {
-      const { thread_id } = await createThread();
+      // Create new thread with user metadata
+      const { thread_id } = await createThread(userId);
       console.log("🎯 User manually created new thread:", thread_id);
+
+      // Update URL
+      setThreadId(thread_id);
+
       return { externalId: thread_id };
     },
     load: async (externalId) => {
       console.log("📂 Loading thread:", externalId);
       const state = await getThreadState(externalId);
+      const values = state.values as Record<string, any>;
 
       return {
-        messages: state.values.messages,
+        messages: values?.messages || [],
       };
     },
   });
+
+  // Monitor threadId changes from URL
+  useEffect(() => {
+    if (!threadId) return;
+
+    // The runtime will automatically call 'load' when we switch threads
+    console.log("🔄 Thread ID changed in URL:", threadId);
+  }, [threadId]);
 
   return (
     <AssistantRuntimeProvider runtime={runtime}>
@@ -188,12 +273,23 @@ export function Assistant() {
           <Header
             sidebarCollapsed={sidebarCollapsed}
             onToggleSidebar={() => setSidebarCollapsed(!sidebarCollapsed)}
+            onOpenStructure={() => setStructureModalOpen(true)}
+            onOpenPdf={() => setPdfViewerOpen(true)}
           />
           <main className="flex-1 overflow-hidden">
             <Thread />
           </main>
         </div>
       </div>
+      {structureModalOpen && (
+        <LawStructureModal
+          open={structureModalOpen}
+          onOpenChange={setStructureModalOpen}
+        />
+      )}
+      {pdfViewerOpen && (
+        <PdfViewer open={pdfViewerOpen} onOpenChange={setPdfViewerOpen} />
+      )}
     </AssistantRuntimeProvider>
   );
 }

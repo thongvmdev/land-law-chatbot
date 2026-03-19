@@ -46,26 +46,42 @@ export async function getWeaviateClient(
   weaviateGrpcUrl?: string,
   weaviateApiKey?: string,
 ): Promise<WeaviateClient> {
-  const url = weaviateUrl || process.env.WEAVIATE_URL || 'weaviate.hanu-nus.com'
+  const url = weaviateUrl || process.env.WEAVIATE_URL || 'http://weaviate:8080'
   const grpcUrl =
-    weaviateGrpcUrl ||
-    process.env.WEAVIATE_GRPC_URL ||
-    'grpc-weaviate.hanu-nus.com'
+    weaviateGrpcUrl || process.env.WEAVIATE_GRPC_URL || 'weaviate:50051'
   const apiKey = weaviateApiKey || process.env.WEAVIATE_API_KEY || 'admin-key'
 
-  const httpHost = url.replace(/^https?:\/\//, '')
-  const grpcHost = grpcUrl.replace(/^https?:\/\//, '')
+  // Detect if we're using local Docker (http://) or cloud (https://)
+  // Local indicators: starts with http:// OR doesn't contain dots (service name)
+  const isLocalDocker =
+    url.startsWith('http://') ||
+    (!url.includes('://') && !url.includes('.')) ||
+    url.includes('localhost') ||
+    url.includes('weaviate:')
+
+  const httpHost = url.replace(/^https?:\/\//, '').split(':')[0]
+  const grpcHost = grpcUrl.split(':')[0]
+
+  // Configure connection based on environment
+  const httpPort = isLocalDocker ? 8080 : 443
+  const httpSecure = !isLocalDocker
+  const grpcPort = isLocalDocker ? 50051 : 443
+  const grpcSecure = !isLocalDocker
+
+  console.log(
+    `🔌 Connecting to Weaviate: ${httpHost}:${httpPort} (secure: ${httpSecure}), gRPC: ${grpcHost}:${grpcPort} (secure: ${grpcSecure})`,
+  )
 
   const client = await weaviate.connectToCustom({
     httpHost,
-    httpPort: 443,
-    httpSecure: true,
+    httpPort,
+    httpSecure,
     grpcHost,
-    grpcPort: 443,
-    grpcSecure: true,
+    grpcPort,
+    grpcSecure,
     authCredentials: new weaviate.ApiKey(apiKey),
-    // Skip init checks to avoid gRPC health check failures with proxied/tunneled connections
-    skipInitChecks: true,
+    // Skip init checks for local Docker to avoid health check issues
+    skipInitChecks: isLocalDocker,
     // Increase timeouts for slow/tunneled connections
     timeout: {
       init: 60_000, // 60 seconds for initialization

@@ -17,9 +17,6 @@ import {
 import path from 'path'
 import { getBaseConfiguration } from '../configuration.js'
 
-const WEAVIATE_URL = process.env.WEAVIATE_URL
-const WEAVIATE_GRPC_URL = process.env.WEAVIATE_GRPC_URL
-const WEAVIATE_API_KEY = process.env.WEAVIATE_API_KEY
 const PARSER_SERVICE_URL =
   process.env.PARSER_SERVICE_URL || 'http://localhost:8001'
 
@@ -182,11 +179,7 @@ export async function ingestDocs(): Promise<void> {
   }
 
   // Initialize Weaviate client
-  const weaviateClient = await getWeaviateClient(
-    WEAVIATE_URL,
-    WEAVIATE_GRPC_URL,
-    WEAVIATE_API_KEY,
-  )
+  const weaviateClient = await getWeaviateClient()
 
   let recordManager: PostgresRecordManager | undefined
 

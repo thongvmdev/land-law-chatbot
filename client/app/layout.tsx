@@ -2,6 +2,10 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
+import { Suspense } from "react";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { NuqsAdapter } from "nuqs/adapters/next/app";
+import { Loader2 } from "lucide-react";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -17,6 +21,19 @@ export const metadata: Metadata = {
   title: "Land Law Assistant",
   description: "AI-powered assistant for land law queries",
 };
+
+function LoadingFallback() {
+  return (
+    <div className="flex h-screen w-full items-center justify-center bg-background">
+      <div className="flex flex-col items-center gap-4">
+        <Loader2 className="size-12 animate-spin text-blue-600" />
+        <p className="text-sm font-medium text-muted-foreground">
+          Đang tải Trợ lý Luật Đất đai...
+        </p>
+      </div>
+    </div>
+  );
+}
 
 export default function RootLayout({
   children,
@@ -34,7 +51,11 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          {children}
+          <TooltipProvider>
+            <NuqsAdapter>
+              <Suspense fallback={<LoadingFallback />}>{children}</Suspense>
+            </NuqsAdapter>
+          </TooltipProvider>
         </ThemeProvider>
       </body>
     </html>
