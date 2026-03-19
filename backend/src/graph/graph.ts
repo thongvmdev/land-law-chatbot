@@ -40,8 +40,6 @@ import {
   generateNoAnswer,
 } from './nodes'
 
-const DATABASE_URI = process.env.DATABASE_URI as string
-const checkpointer = PostgresSaver.fromConnString(DATABASE_URI)
 
 /**
  * CONDITIONAL EDGE: Route after Land Law relevance check
@@ -154,6 +152,10 @@ function decideToGenerate(
  * Build the Land Law Agentic Workflow Graph
  */
 export async function buildLandLawGraph() {
+  const checkpointer = PostgresSaver.fromConnString(
+    process.env.DATABASE_URI as string,
+  )
+
   const workflow = new StateGraph(AgentState, {
     input: InputStateAnnotation,
     context: LandLawAgentConfigurationSchema,
@@ -204,6 +206,8 @@ export async function buildLandLawGraph() {
 }
 
 /**
- * Main graph instance (singleton)
+ * Export the async factory function as the graph entry point.
+ * LangGraph runtime calls this function at startup (not at import time),
+ * so DATABASE_URI is only accessed when the server actually starts.
  */
-export const landLawGraph = buildLandLawGraph()
+export const landLawGraph = buildLandLawGraph
