@@ -17,9 +17,6 @@ import {
 import path from 'path'
 import { getBaseConfiguration } from '../configuration.js'
 
-const WEAVIATE_URL = process.env.WEAVIATE_URL
-const WEAVIATE_GRPC_URL = process.env.WEAVIATE_GRPC_URL
-const WEAVIATE_API_KEY = process.env.WEAVIATE_API_KEY
 const PARSER_SERVICE_URL =
   process.env.PARSER_SERVICE_URL || 'http://localhost:8001'
 

@@ -40,8 +40,8 @@ import {
   generateNoAnswer,
 } from './nodes'
 
-const DB_URI = process.env.LANGGRAPH_PERSISTENCE as string
-const checkpointer = PostgresSaver.fromConnString(DB_URI)
+const DATABASE_URI = process.env.DATABASE_URI as string
+const checkpointer = PostgresSaver.fromConnString(DATABASE_URI)
 
 /**
  * CONDITIONAL EDGE: Route after Land Law relevance check

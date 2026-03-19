@@ -3,7 +3,6 @@
 ### Benefit of metadata
 
 1.  **Câu hỏi có số điều cụ thể (Direct Lookup):**
-
     - **Logic:** Agent/LLM trích xuất số điều -> Tạo bộ lọc (Filter) -> Gọi Vector DB.
     - **Thực tế:** **Vẫn PHẢI vào Vector DB**, nhưng là truy vấn có điều kiện (Filtered Query).
       - Tại sao? Vì bạn cần lấy nội dung text (`page_content`) để LLM đọc và trả lời. Vector DB lúc này đóng vai trò như một DB thông thường (NoSQL), tìm kiếm chính xác theo `article_id`. Đây là cách nhanh nhất và chính xác nhất.
@@ -68,7 +67,6 @@
   [x] langgraphcli:up > docker by defalut > check this case
   [x] Docker: weaviate, Postgre Index and Postgre Checkpointer, FrontEnd
   [] Check (Local & Prod):
-
   - Ingest
   - Retrivel
     [] Ollama Clouds
@@ -81,10 +79,21 @@
 **What are**
 [] Reasoning Model
 [] Function Calling / Tool Use Model
+[] Consider add logic: refine first user query base on `Main Structure Of LandLaw`
 [] Ctx Engineering: Shor term & Long term Memories & `Messages histories mgmt > Critical, when integrate with FE`
-[] Learning Skills with Deepagents > ref youtube Channel & X
-[] Deep Agent on LC Udemy Course
+
+```ts
+const conversationHistory = formatConversationHistory(
+  stateMessages.slice(0, -1),
+) // Node generateMapReduce
+```
+
+**Deep Agent**
+[x] Deep Agent on LC Udemy Course
+[] Learning Skills with Deepagents > ref youtube Channel & X > `> Should continues with this`
+[x] Agent Skills > `https://agentskills.io/home`
+[] Continues with Udemy Course
 
 ===
 
-- More detail steps > if free at office day > baby step to implement. > `avoid force fast`
+- Setup CICD / Self-host LangGraph.
