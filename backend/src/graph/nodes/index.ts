@@ -32,7 +32,52 @@ import { HybridOptions } from 'weaviate-client'
 import { getBaseConfiguration } from '../../configuration.js'
 
 /**
- * NODE 0: Check Land Law Relevance
+ * NODE 0 (entry): Contextualize Question
+ *
+ * Rewrites a follow-up question into a fully self-contained standalone query
+ * so that all downstream nodes can operate without needing the full history.
+ *
+ * On the first turn (no prior messages) the raw question is used as-is and
+ * no LLM call is made, keeping latency at zero for the common cold-start case.
+ */
+export async function contextualizeQuestion(
+  state: AgentStateType,
+  config?: RunnableConfig,
+): Promise<Partial<AgentStateType>> {
+  console.log('---CONTEXTUALIZE QUESTION---')
+  const { messages } = state
+  const agentConfig = getLandLawAgentConfiguration(config)
+
+  const rawQuestion = extractLatestQuestion(messages)
+
+  // No prior history — nothing to contextualize
+  if (messages.length <= 1) {
+    console.log('→ First turn, skipping contextualization')
+    return { question: rawQuestion }
+  }
+
+  const history = formatConversationHistory(
+    messages.slice(0, -1),
+    agentConfig.maxHistoryTokens,
+  )
+
+  const model = loadChatModel(agentConfig.queryModel)
+  const systemPrompt = await PROMPTS.CONTEXTUALIZE_QUESTION.formatMessages({
+    history,
+    question: rawQuestion,
+  })
+  const response = await model.invoke(systemPrompt, config)
+  const standaloneQuestion =
+    typeof response.content === 'string' ? response.content.trim() : rawQuestion
+
+  console.log(`🔄 Original: ${rawQuestion}`)
+  console.log(`🔄 Contextualized: ${standaloneQuestion}`)
+
+  return { question: standaloneQuestion }
+}
+
+/**
+ * NODE 1: Check Land Law Relevance
  *
  * Checks if the user's question is related to Vietnamese Land Law.
  * If not related, returns a message asking the user to re-enter their question.
@@ -50,8 +95,8 @@ export async function checkLandLawRelevance(
     name: 'check_land_law_relevance',
   })
 
-  // Extract question from messages
-  const question = extractLatestQuestion(messages)
+  // Prefer the contextualized question set by contextualizeQuestion node
+  const question = state.question || extractLatestQuestion(messages)
   const systemPrompt = await PROMPTS.CHECK_LAND_LAW_RELEVANCE.formatMessages({
     question,
   })
@@ -335,18 +380,16 @@ export async function generateStandard(
   // Load response model
   const model = loadChatModel(agentConfig.responseModel)
 
-  // TODO: Research more detail
   const conversationHistory = formatConversationHistory(
-    stateMessages.slice(0, -1), // Exclude current question
+    stateMessages.slice(0, -1),
+    agentConfig.maxHistoryTokens,
   )
 
   // Format prompt for generation
   const messages = await PROMPTS.GENERATION.formatMessages({
     context,
     question,
-    history:
-      conversationHistory ||
-      'Chưa có lịch sử hội thoại (đây là câu hỏi đầu tiên).',
+    history: conversationHistory,
   })
 
   const response = await model.invoke(messages, config)
@@ -433,9 +476,7 @@ export async function reducePartialAnswers(
   const messages = await PROMPTS.REDUCE_ANSWERS.formatMessages({
     question,
     partial_answers: formattedAnswers,
-    history:
-      conversationHistory ||
-      'Chưa có lịch sử hội thoại (đây là câu hỏi đầu tiên).',
+    history: conversationHistory,
   })
 
   const response = await model.invoke(messages, config)
@@ -495,8 +536,10 @@ export async function generateMapReduce(
   // REDUCE PHASE: Synthesize final answer
   console.log('🔄 Reduce phase: Synthesizing final answer...')
 
+  const agentConfig = getLandLawAgentConfiguration(config)
   const conversationHistory = formatConversationHistory(
     stateMessages.slice(0, -1),
+    agentConfig.maxHistoryTokens,
   )
 
   const finalAnswer = await reducePartialAnswers(

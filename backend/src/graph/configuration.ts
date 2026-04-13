@@ -249,6 +249,19 @@ export const LandLawAgentConfigurationSchema = BaseConfigurationSchema.extend({
     .max(20)
     .default(6)
     .describe('Document count threshold for Map-Reduce strategy'),
+
+  /**
+   * Token budget for conversation history injected into prompts.
+   * History is built by walking backwards through Q&A pairs until
+   * this budget is exhausted (approximate: chars / 4 = tokens).
+   * @default 1200
+   */
+  maxHistoryTokens: z
+    .number()
+    .min(400)
+    .max(4000)
+    .default(1200)
+    .describe('Token budget for conversation history injected into prompts'),
 })
 
 export type LandLawAgentConfiguration = z.infer<

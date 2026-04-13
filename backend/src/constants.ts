@@ -43,6 +43,7 @@ export const METADATA_KEYS: (keyof MetadataKey)[] = [
 
 // Graph node names
 export const GRAPH_NODES = {
+  CONTEXTUALIZE_QUESTION: 'contextualize_question',
   CHECK_RELEVANCE: 'check_relevance',
   ROUTE_QUERY: 'route_query',
   DECOMPOSE_QUERY: 'decompose_query',

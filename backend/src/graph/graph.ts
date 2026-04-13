@@ -29,6 +29,7 @@ import {
 import { extractLatestQuestion } from '../utils.js'
 import { GRAPH_NODES } from '../constants.js'
 import {
+  contextualizeQuestion,
   checkLandLawRelevance,
   rejectQuestion,
   routeQuery,
@@ -161,6 +162,7 @@ export async function buildLandLawGraph() {
     context: LandLawAgentConfigurationSchema,
   })
     // Add all nodes
+    .addNode(GRAPH_NODES.CONTEXTUALIZE_QUESTION, contextualizeQuestion)
     .addNode(GRAPH_NODES.CHECK_RELEVANCE, checkLandLawRelevance)
     .addNode(GRAPH_NODES.REJECT_QUESTION, rejectQuestion)
     .addNode(GRAPH_NODES.ROUTE_QUERY, routeQuery)
@@ -171,8 +173,9 @@ export async function buildLandLawGraph() {
     .addNode(GRAPH_NODES.GENERATE, generate)
     .addNode(GRAPH_NODES.NO_ANSWER, generateNoAnswer)
 
-    // START → Check Land Law Relevance
-    .addEdge(START, GRAPH_NODES.CHECK_RELEVANCE)
+    // START → Contextualize Question → Check Land Law Relevance
+    .addEdge(START, GRAPH_NODES.CONTEXTUALIZE_QUESTION)
+    .addEdge(GRAPH_NODES.CONTEXTUALIZE_QUESTION, GRAPH_NODES.CHECK_RELEVANCE)
 
     // Check Relevance → Route Query (if related) OR Reject (if not related)
     .addConditionalEdges(GRAPH_NODES.CHECK_RELEVANCE, routeAfterRelevanceCheck)

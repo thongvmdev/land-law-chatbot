@@ -407,11 +407,11 @@ HƯỚNG DẪN TRẢ LỜI:
     `📚 TÀI LIỆU PHÁP LUẬT:
 {context}
 
-💬 LỊCH SỬ HỘI THOẠI:
-{history}
-
 ❓ CÂU HỎI:
-{question}`,
+{question}
+
+💬 LỊCH SỬ HỘI THOẠI:
+{history}`,
   ],
 ])
 
@@ -565,10 +565,10 @@ CHÚ Ý:
 📚 CÁC CÂU TRẢ LỜI TỪNG PHẦN:
 {partial_answers}
 
-💬 LỊCH SỬ HỘI THOẠI (nếu có):
-{history}
+Tổng hợp thành câu trả lời cuối cùng:
 
-Tổng hợp thành câu trả lời cuối cùng:`,
+💬 LỊCH SỬ HỘI THOẠI (nếu có):
+{history}`,
   ],
 ])
 
@@ -609,9 +609,36 @@ Tôi sẵn sàng hỗ trợ bạn! 🌟`,
 ])
 
 /**
+ * Prompt for contextualizing a follow-up question into a standalone query.
+ *
+ * Given conversation history and the latest question, rewrites the question
+ * so it does not rely on prior context (coreference resolution).
+ * If the question is already self-contained, it is returned unchanged.
+ */
+export const CONTEXTUALIZE_QUESTION_PROMPT = ChatPromptTemplate.fromMessages([
+  [
+    'system',
+    `Bạn là trợ lý hỗ trợ xử lý ngôn ngữ. Nhiệm vụ duy nhất của bạn là viết lại câu hỏi của người dùng thành câu hỏi độc lập, không cần ngữ cảnh trước.
+
+NGUYÊN TẮC:
+- Nếu câu hỏi đã độc lập (không tham chiếu "điều đó", "nó", "trường hợp trên", v.v.) → trả về NGUYÊN VĂN không thay đổi
+- Nếu câu hỏi là follow-up → viết lại thành câu hỏi hoàn chỉnh sử dụng thông tin từ lịch sử
+- Chỉ xuất câu hỏi đã viết lại, KHÔNG giải thích, KHÔNG trả lời câu hỏi`,
+  ],
+  [
+    'human',
+    `LỊCH SỬ HỘI THOẠI:
+{history}
+
+CÂU HỎI GỐC: {question}`,
+  ],
+])
+
+/**
  * Export all prompts as a collection for easy access
  */
 export const PROMPTS = {
+  CONTEXTUALIZE_QUESTION: CONTEXTUALIZE_QUESTION_PROMPT,
   CHECK_LAND_LAW_RELEVANCE: CHECK_LAND_LAW_RELEVANCE_PROMPT,
   ROUTE_QUERY: ROUTE_QUERY_PROMPT,
   DECOMPOSE_QUERY: DECOMPOSE_QUERY_PROMPT,

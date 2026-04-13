@@ -274,50 +274,103 @@ export function reduceDocs(
   return combinedByUuid
 }
 
-// TODO: double check logic later when integrate with FE
+/**
+ * Rough token estimator: 1 token ≈ 4 characters for Vietnamese/English mixed text.
+ */
+function estimateTokens(text: string): number {
+  return Math.ceil(text.length / 4)
+}
+
+/**
+ * Extract a human-readable topic label from a human message.
+ * Prefers explicit article references (e.g. "Điều 152") and falls back
+ * to the first 40 chars of the message (more informative than "chủ đề khác").
+ */
+function extractTopic(content: string): string {
+  const articleMatch = content.match(/Điều\s+\d+/)
+  if (articleMatch) return articleMatch[0]
+
+  const chapterMatch = content.match(/Chương\s+[IVXLC\d]+/)
+  if (chapterMatch) return chapterMatch[0]
+
+  // Strip common question prefixes before taking the excerpt
+  const excerpt = content
+    .replace(/^(cho tôi biết|hỏi về|giải thích|quy định về)\s*/i, '')
+    .slice(0, 40)
+    .trim()
+  return excerpt || 'câu hỏi khác'
+}
+
+/**
+ * Formats conversation history as a string for injection into LLM prompts.
+ *
+ * Strategy:
+ * - Walk backwards through Q&A pairs, including the full turn text until
+ *   the token budget (maxTokens) is exhausted.
+ * - Older messages that exceed the budget are summarised as a compact topic list.
+ *
+ * @param messages  - Prior messages (should NOT include the current user turn)
+ * @param maxTokens - Approximate token budget for the history string (default 1200)
+ */
 export function formatConversationHistory(
   messages: BaseMessage[],
-  keepRecentTurns: number = 3,
+  maxTokens: number = 1200,
 ): string {
-  if (!messages || messages.length === 0) {
-    return ''
+  if (!messages || messages.length === 0) return ''
+
+  const recentTurns: string[] = []
+  const oldTopics: string[] = []
+  let usedTokens = 0
+
+  // Walk backwards in Q&A pairs (human at i-1, ai at i)
+  for (let i = messages.length - 1; i >= 1; i -= 2) {
+    const aiMsg = messages[i]
+    const humanMsg = messages[i - 1]
+    if (!aiMsg || !humanMsg) continue
+    if (aiMsg.type !== 'ai' || humanMsg.type !== 'human') continue
+
+    const humanContent =
+      typeof humanMsg.content === 'string'
+        ? humanMsg.content
+        : JSON.stringify(humanMsg.content)
+    const aiContent =
+      typeof aiMsg.content === 'string'
+        ? aiMsg.content
+        : JSON.stringify(aiMsg.content)
+
+    const turn = `👤 Người dùng: ${humanContent}\n🤖 Trợ lý: ${aiContent}`
+    const turnTokens = estimateTokens(turn)
+
+    if (usedTokens + turnTokens > maxTokens) {
+      // This turn doesn't fit — summarise it and all earlier ones as topics
+      oldTopics.unshift(extractTopic(humanContent))
+      for (let j = i - 2; j >= 1; j -= 2) {
+        const olderHuman = messages[j - 1]
+        if (olderHuman?.type === 'human') {
+          const olderContent =
+            typeof olderHuman.content === 'string'
+              ? olderHuman.content
+              : JSON.stringify(olderHuman.content)
+          oldTopics.unshift(extractTopic(olderContent))
+        }
+      }
+      break
+    }
+
+    recentTurns.unshift(turn)
+    usedTokens += turnTokens
   }
 
-  // Split into old and recent
-  const recentCount = keepRecentTurns * 2 // Q&A pairs
-  const oldMessages = messages.slice(0, -recentCount)
-  const recentMessages = messages.slice(-recentCount)
+  const parts: string[] = []
 
-  let formatted = ''
-
-  // Summarize old messages
-  if (oldMessages.length > 0) {
-    const topics = oldMessages
-      .filter((m) => m.type === 'human')
-      .map((m) => {
-        const content = typeof m.content === 'string' ? m.content : ''
-        // Extract article numbers if mentioned
-        const match = content.match(/Điều\s+\d+/)
-        return match ? match[0] : 'chủ đề khác'
-      })
-    formatted += `[Lịch sử cũ - Đã thảo luận: ${[...new Set(topics)].join(
-      ', ',
-    )}]\n\n`
+  if (oldTopics.length > 0) {
+    const uniqueTopics = [...new Set(oldTopics)]
+    parts.push(`[Lịch sử cũ - Đã thảo luận: ${uniqueTopics.join(', ')}]`)
   }
 
-  // Full recent messages
-  if (recentMessages.length > 0) {
-    formatted += recentMessages
-      .map((msg) => {
-        const role = msg.type === 'human' ? '👤 Người dùng' : '🤖 Trợ lý'
-        const content =
-          typeof msg.content === 'string'
-            ? msg.content
-            : JSON.stringify(msg.content)
-        return `${role}: ${content}`
-      })
-      .join('\n\n')
+  if (recentTurns.length > 0) {
+    parts.push(recentTurns.join('\n\n'))
   }
 
-  return formatted
+  return parts.join('\n\n')
 }
