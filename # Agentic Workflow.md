@@ -66,21 +66,9 @@
 
   [x] langgraphcli:up > docker by defalut > check this case
   [x] Docker: weaviate, Postgre Index and Postgre Checkpointer, FrontEnd
-  [] Check (Local & Prod):
+  [x] Check (Local & Prod):
   - Ingest
   - Retrivel
-    [] Ollama Clouds
-
-- [] Evals
-  - Grade using LLM to analyze
-  - Consider add: grade with filter specific id from DB
-  - Consider add tools: practice & improve accuracy result
-
-**What are**
-[] Reasoning Model
-[] Function Calling / Tool Use Model
-[] Consider add logic: refine first user query base on `Main Structure Of LandLaw`
-[] Ctx Engineering: Shor term & Long term Memories & `Messages histories mgmt > Critical, when integrate with FE`
 
 ```ts
 const conversationHistory = formatConversationHistory(
@@ -88,12 +76,23 @@ const conversationHistory = formatConversationHistory(
 ) // Node generateMapReduce
 ```
 
-**Deep Agent**
-[x] Deep Agent on LC Udemy Course
-[] Learning Skills with Deepagents > ref youtube Channel & X > `> Should continues with this`
-[x] Agent Skills > `https://agentskills.io/home`
-[] Continues with Udemy Course
-
 ===
 
-- Setup CICD / Self-host LangGraph.
+- **[] Revise: Graph > Optimize**
+  - [] Summarize model consume
+  - [] mapReduce retrieve docs
+  - [] Conversation history
+
+- **[] Apply for practice:**
+  - [] HITL
+  - [] Subagent
+
+- **[] Evals**
+  - Grade using LLM to analyze
+  - Consider add: grade with filter specific id from DB
+  - Consider add tools: practice & improve accuracy result
+
+**What are**
+[] Reasoning Model
+[] Function Calling / Tool Use Model
+[] Ctx Engineering: Shor term & Long term Memories & `Messages histories mgmt > Critical, when integrate with FE`
